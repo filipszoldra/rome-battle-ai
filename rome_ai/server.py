@@ -610,7 +610,8 @@ def make_handler(new_general, plan_interval: float, sides: str = "ai"):
                 elif isinstance(msg, Resume):
                     for s in started:
                         s.resume()
-                        writer.write(dump(s.control(True)))
+                        if not s.fallback:  # a general without answers (usage limit) leaves his side to the game's AI
+                            writer.write(dump(s.control(True)))
                 elif isinstance(msg, BattleEnd):
                     log.info("battle over, winner alliance %s", msg.winner_alliance)
                     for s in sessions:

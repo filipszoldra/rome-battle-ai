@@ -51,6 +51,7 @@ CONTACT_M = 200.0  # any of our units this close to an enemy unit: plan every cy
 DEPLOYMENT_STAGES = (1, 2, 3, 4)
 PRED_SNAP_EVERY = 5.0  # s of battle time between saved predictions (checked 5 and 10 s later, in the battle log)
 CONTACT_INTERVAL = 4.0  # s between plans (from the start of one to the start of the next) while in contact
+NO_WITHDRAW = ("no_retreat", "berserker")  # commanders whose units never leave the battlefield
 
 
 class _SideLog(logging.LoggerAdapter):
@@ -91,6 +92,7 @@ class BattleSession:
         self.sides_checked = False
         self.personality: str | None = None  # --personality for this side: a commander's id, "auto" or None
         self.doctrine_ready = False  # army recognised, history and personality given to the general (this battle)
+        self.personality_no_withdraw = False
 
     def on_battle_start(self, msg: BattleStart) -> None:
         self.stop()
@@ -300,6 +302,8 @@ class BattleSession:
         if self.executor is None:
             return
         orders = self.executor.tick(msg, self.plan)
+        if self.personality_no_withdraw:  # no_retreat / berserker: no unit ever leaves the field, whatever the plan says
+            orders = [o for o in orders if o.cmd != "withdraw"]
         msg.reflex_status = self.executor.reflexes.status(self.plan, msg)
         msg.plan_since = self.plan_since
         msg.own_paths = {k: list(v) for k, v in self.executor.paths.items()}
@@ -387,8 +391,8 @@ class BattleSession:
         mine = [u.name for u in units if u.alliance == ai]
         foe_sides = sorted({u.alliance for u in units if u.alliance != ai})
         try:
-            my_army = P.identify(mine)
-            foes = [(a, P.identify([u.name for u in units if u.alliance == a])) for a in foe_sides]
+            my_army = P.identify_side([u for u in units if u.alliance == ai])
+            foes = [(a, P.identify_side([u for u in units if u.alliance == a])) for a in foe_sides]
             commander, reason = self.personality, None
             if commander == "auto":
                 situation = ("a siege - you " + ("defend the town" if self.start.player_is_attacker else "attack the town")
@@ -403,6 +407,10 @@ class BattleSession:
             self.log.warning("army recognition / personality failed: %s - the general goes without them", e)
             my_army, foes, commander, reason = None, [], None, str(e)
         self.doctrine_ready = True
+        self.personality_no_withdraw = commander in NO_WITHDRAW
+        if self.personality_no_withdraw:  # the general is told he cannot leave (the briefing is built after this)
+            self.start.can_withdraw = False
+            self.start.briefing = None
         types = P.army_types()
         name = P.commanders()[commander].name if commander in P.commanders() else "standard (no personality)"
         self.log.info("army: %s against %s; personality: %s%s",

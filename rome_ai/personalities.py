@@ -95,8 +95,17 @@ def sides(b: Entry) -> tuple[str, str, bool]:
 class Army:
     type: str | None  # army type id, None if the units do not tell
     factions: list[str]  # the most likely factions (all of them when the units fit several equally)
+    parts: list["Army"] = field(default_factory=list)  # a team of several factions: each army recognised alone
+
+    def all_types(self) -> list[str]:
+        return list(dict.fromkeys(a.type for a in (self.parts or [self]) if a.type))
+
+    def summary(self, types: dict[str, Entry]) -> str:
+        return " / ".join(f"{types[t].name}: {types[t].fields.get('summary', '')}" for t in self.all_types())
 
     def describe(self, types: dict[str, Entry], pl: bool = False) -> str:
+        if self.parts:
+            return " + ".join(a.describe(types, pl) for a in self.parts)
         if self.type is None:
             return "nierozpoznana" if pl else "not recognised from its units"
         t = types[self.type]
@@ -122,6 +131,31 @@ def identify(unit_names: list[str], types: dict[str, Entry] | None = None) -> Ar
     top = sorted(f for f, s in score.items() if s == best)
     kind = Counter(of_type[f] for f in top).most_common(1)[0][0]
     return Army(kind, [f for f in top if of_type[f] == kind])
+
+
+def identify_side(units) -> Army:
+    """One side (team) of a battle: each of its armies is recognised alone (unit id = (alliance + 1) * 10000 +
+    army * 100 + n), so a team of Romans and Egyptians is both, not just the bigger one."""
+    armies: dict[int, list[str]] = {}
+    for u in units:
+        armies.setdefault(u.id // 100 % 100, []).append(u.name)
+    whole = identify([u.name for u in units])
+    parts = {}
+    for names in armies.values():
+        a = identify(names)
+        parts.setdefault((a.type, tuple(a.factions)), a)
+    if len(parts) > 1:
+        whole.parts = list(parts.values())
+    return whole
+
+
+def side_lessons(mine: Army, foes: list[Army]) -> list[Entry]:
+    """lessons() for every army type on your side against every army type on the enemy sides."""
+    foe_types = [t for a in foes for t in a.all_types()]
+    picked: list[Entry] = []
+    for t in mine.all_types() or [None]:
+        picked += [b for b in lessons(t, foe_types) if b not in picked]
+    return picked[:MAX_LESSONS]
 
 
 # --- what a general is told --------------------------------------------------------------------------------
@@ -155,10 +189,10 @@ def _battle_text(b: Entry, types: dict[str, Entry]) -> str:
 def doctrine(mine: Army, foes: list[tuple[int, Army]], commander: str | None = None, reason: str | None = None) -> str:
     """The block of the system prompt about this battle: who you are, who you fight, your personality, history."""
     types, cmds = army_types(), commanders()
-    out = [f"YOUR ARMY: {mine.describe(types)}" + (f" - {types[mine.type].fields.get('summary', '')}" if mine.type else "")]
+    out = [f"YOUR ARMY: {mine.describe(types)}" + (f" - {mine.summary(types)}" if mine.all_types() else "")]
     for alliance, a in foes:
         tag = f" (side #{alliance + 1}xxxx)" if len(foes) > 1 else ""
-        out.append(f"ENEMY{tag}: {a.describe(types)}" + (f" - {types[a.type].fields.get('summary', '')}" if a.type else ""))
+        out.append(f"ENEMY{tag}: {a.describe(types)}" + (f" - {a.summary(types)}" if a.all_types() else ""))
     c = cmds.get(commander) if commander else None
     if c is not None:
         out.append(
@@ -167,7 +201,7 @@ def doctrine(mine: Army, foes: list[tuple[int, Army]], commander: str | None = N
             + "\nThe STRATEGY above is the standard craft of this game that every commander follows. Keep to it, "
               "except where these orders of yours deliberately depart from it or put something else first - there, "
               "these orders win:\n" + "\n".join(f"- {x}" for x in c.lines))
-    hist = lessons(mine.type, [a.type for _, a in foes])
+    hist = side_lessons(mine, [a for _, a in foes])
     if hist:
         out.append("\nHISTORY - battles between armies like yours and your enemy's. Learn from the winners and the "
                    "losers alike; your units in this game are not exactly theirs:\n"
@@ -212,7 +246,7 @@ async def pick(general, mine: Army, foes: list[tuple[int, Army]], my_units: list
     if ask is None:  # ponytail: only claude-code can ask; add ask() to the API backends when they need auto
         return fallback_pick(mine), "first commander suggested for this army type (this backend cannot choose)"
     types = army_types()
-    hist = lessons(mine.type, [a.type for _, a in foes])
+    hist = side_lessons(mine, [a for _, a in foes])
 
     def counted(names: list[str]) -> str:
         return ", ".join(f"{n} x{k}" for n, k in Counter(names).most_common())

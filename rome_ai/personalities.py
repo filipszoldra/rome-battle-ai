@@ -322,6 +322,9 @@ th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px soli
 .meta{color:var(--muted);font-size:.92em}.chip{display:inline-block;background:var(--chip);border-radius:999px;padding:1px 10px;
 font:13px/1.6 ui-monospace,Consolas,monospace}details{margin-top:8px}summary{cursor:pointer;color:var(--accent)}
 pre{white-space:pre-wrap;overflow-wrap:anywhere}ul{margin:.4em 0;padding-left:1.2em}.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+code{font:14px ui-monospace,Consolas,monospace;background:var(--chip);padding:1px 5px;border-radius:4px}
+pre.code{font:14px/1.5 ui-monospace,Consolas,monospace;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+ol{margin:.3em 0}
 """
 
 
@@ -357,6 +360,68 @@ def render_html(lang: str) -> str:
     return page(w["title"], "\n".join(b), lang)
 
 
+def _md_inline(s: str) -> str:
+    s = html.escape(s, quote=False)
+    s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
+    s = re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", s)
+    return re.sub(r"\[([^\]]+)\]\(([^)]+?)(\.md)?\)", lambda m: f'<a href="{m.group(2)}{".html" if m.group(3) else ""}">'
+                  f"{m.group(1)}</a>", s)
+
+
+def md_to_html(text: str) -> str:
+    """The little markdown the guides use (docs/guide*.md): headings, paragraphs, lists, tables, code blocks,
+    `code`, **bold** and links (to .md files -> .html). ponytail: no markdown library in requirements.txt."""
+    lines, out, para, i = text.splitlines(), [], [], 0
+
+    def flush() -> None:
+        if para:
+            out.append(f"<p>{_md_inline(' '.join(para))}</p>")
+            para.clear()
+
+    while i < len(lines):
+        raw, s = lines[i], lines[i].strip()
+        if s.startswith("```"):  # a code block, also one indented under a list item
+            flush()
+            indent, code = len(raw) - len(raw.lstrip()), []
+            i += 1
+            while i < len(lines) and not lines[i].strip().startswith("```"):
+                code.append(lines[i][indent:] if not lines[i][:indent].strip() else lines[i])
+                i += 1
+            out.append(f'<pre class="code">{html.escape(chr(10).join(code))}</pre>')
+        elif not s:
+            flush()
+        elif m := re.match(r"^(#{1,3}) (.*)", s):
+            flush()
+            out.append(f"<h{len(m.group(1))}>{_md_inline(m.group(2))}</h{len(m.group(1))}>")
+        elif s.startswith("|"):
+            flush()
+            rows = []
+            while i < len(lines) and lines[i].strip().startswith("|"):
+                if not re.match(r"^\|[\s\-:|]+\|$", lines[i].strip()):
+                    rows.append([c.strip() for c in lines[i].strip().strip("|").split("|")])
+                i += 1
+            out.append('<div class="wrap"><table><tr>' + "".join(f"<th>{_md_inline(c)}</th>" for c in rows[0]) + "</tr>"
+                       + "".join("<tr>" + "".join(f"<td>{_md_inline(c)}</td>" for c in r) + "</tr>" for r in rows[1:])
+                       + "</table></div>")
+            continue
+        elif s.startswith("- "):
+            flush()
+            items = []
+            while i < len(lines) and lines[i].strip().startswith("- "):
+                items.append(lines[i].strip()[2:])
+                i += 1
+            out.append("<ul>" + "".join(f"<li>{_md_inline(x)}</li>" for x in items) + "</ul>")
+            continue
+        elif m := re.match(r"^(\d+)\. (.*)", s):
+            flush()
+            out.append(f'<ol start="{m.group(1)}"><li>{_md_inline(m.group(2))}</li></ol>')
+        else:
+            para.append(s)
+        i += 1
+    flush()
+    return "\n".join(out)
+
+
 def write_docs() -> list[Path]:
     DOCS_DIR.mkdir(exist_ok=True)
     out = []
@@ -364,6 +429,13 @@ def write_docs() -> list[Path]:
         for ext, render in (("md", render_md), ("html", render_html)):
             p = DOCS_DIR / f"commanders{suffix}.{ext}"
             p.write_text(render(lang), encoding="utf-8", newline="\n")
+            out.append(p)
+        guide = DOCS_DIR / f"guide{suffix}.md"  # written by hand; its page is made from it
+        if guide.is_file():
+            text = guide.read_text(encoding="utf-8")
+            title = next((x[2:] for x in text.splitlines() if x.startswith("# ")), "Rome Battle AI")
+            p = guide.with_suffix(".html")
+            p.write_text(page(title, md_to_html(text), lang), encoding="utf-8", newline="\n")
             out.append(p)
     return out
 

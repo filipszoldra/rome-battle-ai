@@ -1,0 +1,68 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rome Battle AI - tryby i komendy</title><style>
+:root{--bg:#f7f4ee;--panel:#fffdf8;--ink:#2b2420;--muted:#6f645a;--line:#e3dbcf;--accent:#8c2f1b;--chip:#efe6d8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17130f;--panel:#211b16;--ink:#eee6da;
+--muted:#ab9f91;--line:#3a3129;--accent:#e08a63;--chip:#2e261f}}
+:root[data-theme="dark"]{--bg:#17130f;--panel:#211b16;--ink:#eee6da;--muted:#ab9f91;--line:#3a3129;--accent:#e08a63;--chip:#2e261f}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Georgia,"Times New Roman",serif}
+main{max-width:980px;margin:0 auto;padding:24px 16px 64px}h1{font-size:2rem;margin:.2em 0}h2{margin-top:2.2em;
+border-bottom:2px solid var(--accent);padding-bottom:.2em}h3{margin:0 0 .2em}a{color:var(--accent)}
+.intro{color:var(--muted)}.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:560px}
+th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:normal}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0}
+.meta{color:var(--muted);font-size:.92em}.chip{display:inline-block;background:var(--chip);border-radius:999px;padding:1px 10px;
+font:13px/1.6 ui-monospace,Consolas,monospace}details{margin-top:8px}summary{cursor:pointer;color:var(--accent)}
+pre{white-space:pre-wrap;overflow-wrap:anywhere}ul{margin:.4em 0;padding-left:1.2em}.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+code{font:14px ui-monospace,Consolas,monospace;background:var(--chip);padding:1px 5px;border-radius:4px}
+pre.code{font:14px/1.5 ui-monospace,Consolas,monospace;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+ol{margin:.3em 0}
+</style></head><body><main><h1>Rome Battle AI - tryby i komendy</h1>
+<p><a href="guide.html">English</a> · <a href="commanders.pl.html">Katalog dowódców</a></p>
+<p>Krótka ściąga: jakie tryby ma ten fork i jak je uruchomić. Wszystkie komendy wpisujesz w PowerShell, w folderze moda:</p>
+<pre class="code">cd C:\rome-battle-ai</pre>
+<p>Serwer AI musi działać, zanim zacznie się bitwa. Okno serwera zostaw otwarte do końca gry. Zatrzymujesz go klawiszami <b>Ctrl+C</b>. Zmiany w kodzie albo w opcjach działają dopiero po ponownym uruchomieniu serwera.</p>
+<h2>1. Kto dowodzi którą stroną</h2>
+<div class="wrap"><table><tr><th>Tryb</th><th>Komenda</th><th>Co się dzieje</th></tr><tr><td><b>Ty kontra Claude</b></td><td><code>.venv\Scripts\python -m rome_ai.server --backend claude-code --effort medium</code></td><td>Claude dowodzi stroną komputera, Ty swoją.</td></tr><tr><td><b>Claude kontra Claude</b></td><td><code>.venv\Scripts\python -m rome_ai.server --backend claude-code --effort medium --sides all</code></td><td>Każda strona bitwy ma osobnego Claude. Ty tylko oglądasz.</td></tr><tr><td><b>3-4 drużyny</b></td><td>ta sama komenda z <code>--sides all</code></td><td>Każda drużyna z custom battle ma osobnego Claude. Wszystkie walczą ze wszystkimi.</td></tr></table></div>
+<p>Przy <code>--sides all</code> nie wydawaj rozkazów swoim oddziałom, bo będziesz się kłócić z Claude. Kamerą możesz latać, jak chcesz. Pauza wstrzymuje wodzów.</p>
+<p>Drużyna to nie armia: jeśli w jednej drużynie są 2 armie, jeden Claude dowodzi obiema.</p>
+<h2>2. Charakter wodza (<code>--personality</code>)</h2>
+<p>Każdy wódz, także domyślny, wie, jakim państwem gra, z kim walczy i jak takie armie walczyły ze sobą w historii. Opcja <code>--personality</code> dodaje do tego styl konkretnego dowódcy. Bez tej opcji wódz gra według standardowej taktyki z <code>strategy.md</code>.</p>
+<div class="wrap"><table><tr><th>Co chcesz</th><th>Dopisz do komendy serwera</th></tr><tr><td>Domyślny wódz</td><td>nic</td></tr><tr><td>Domyślny wódz, który <b>nigdy się nie wycofuje</b>, a gdy bitwy nie da się wygrać, zabija jak najwięcej wrogów</td><td><code>--personality no_retreat</code></td></tr><tr><td>Szaleniec: od początku walczy do końca, liczy się tylko liczba zabitych</td><td><code>--personality berserker</code></td></tr><tr><td>Jeden dowódca dla wszystkich stron</td><td><code>--personality hannibal</code></td></tr><tr><td>Różni dowódcy dla różnych stron</td><td><code>--personality 0=hannibal 1=scipio</code></td></tr><tr><td>Każdy wódz sam wybiera dowódcę dla swojej armii i swojego wroga</td><td><code>--personality auto</code></td></tr><tr><td>Mieszanie</td><td><code>--personality 0=caesar 1=auto</code></td></tr></table></div>
+<p><b>Numery stron:</b> 0 to pierwsza drużyna, 1 druga i tak dalej. Na początku bitwy serwer wypisuje <code>took control of alliance N</code> i linię <code>[alliance N] army: ...; personality: ...</code>. Tam sprawdzisz, która strona ma który numer i kogo dostała.</p>
+<p><b>Lista dowódców</b> z opisami jest w <a href="commanders.pl.html">katalogu</a>. Same nazwy wypisuje:</p>
+<pre class="code">.venv\Scripts\python -m rome_ai.recruit --list</pre>
+<h2>3. Model i namysł</h2>
+<div class="wrap"><table><tr><th>Opcja</th><th>Co robi</th></tr><tr><td><code>--model claude-sonnet-5-5</code></td><td>Domyślny model. Szybki i dobry.</td></tr><tr><td><code>--model claude-opus-5-5</code></td><td>Mocniejszy, wolniejszy, szybciej zużywa limit.</td></tr><tr><td><code>--effort low</code> / <code>medium</code> / <code>high</code></td><td>Jak długo wódz myśli przed każdym planem.</td></tr></table></div>
+<p>Bitwa nie czeka na wodza: wysoki <code>effort</code> oznacza dłuższe myślenie, a oddziały w tym czasie walczą bez nowych rozkazów. Rozsądne są dwa ustawienia: Sonnet z <code>medium</code> albo Opus z <code>low</code>.</p>
+<p>Zużycie limitu: każda strona z Claude to osobny wódz, więc <code>--sides all</code> przy 2 drużynach zużywa limit 2 razy szybciej, a przy 4 drużynach 4 razy szybciej. Gdy limit się skończy, armią przejmuje zwykłe AI gry. Wódz co minutę próbuje wrócić.</p>
+<h2>4. Dobór armii przed bitwą</h2>
+<p>Claude dobiera armię w budżecie custom battle i zapisuje kartę, z której ją wyklikasz w menu gry.</p>
+<pre class="code">.venv\Scripts\python -m rome_ai.recruit --faction macedon --enemy romans_julii --budget 15000 --battle field</pre>
+<div class="wrap"><table><tr><th>Opcja</th><th>Znaczenie</th></tr><tr><td><code>--faction</code></td><td>Twoje państwo, np. <code>macedon</code>, <code>carthage</code>, <code>romans_julii</code> (pełna lista: <code>--list</code>)</td></tr><tr><td><code>--enemy</code></td><td>Państwo wroga, albo kilka: <code>--enemy romans_scipii gauls</code></td></tr><tr><td><code>--budget</code></td><td>Budżet w denarach, taki jak w custom battle</td></tr><tr><td><code>--battle</code></td><td><code>field</code> (zwykła bitwa), <code>siege-attack</code> (atakujesz miasto), <code>siege-defense</code> (bronisz miasta)</td></tr><tr><td><code>--personality</code></td><td>Konkretny dowódca albo <code>auto</code> (domyślnie). Dowódca decyduje, jakie jednostki wybiera.</td></tr><tr><td><code>--units</code></td><td>Najwięcej oddziałów (domyślnie 20, tyle mieści armia)</td></tr><tr><td><code>--lang</code></td><td>Język karty: <code>pl</code> (domyślnie) albo <code>en</code></td></tr><tr><td><code>--model</code>, <code>--effort</code></td><td>Model do doboru (domyślnie Sonnet, <code>medium</code>)</td></tr></table></div>
+<p>Wynik ląduje w <code>C:\rome-battle-ai\armies\</code>, w plikach <code>.html</code> i <code>.md</code>. Karta zawiera:</p>
+<ul><li>listę jednostek z nazwami jak w menu gry, liczbą i ceną,</li><li>wybranego dowódcę i powód wyboru,</li><li>plan użycia armii,</li><li>gotową komendę serwera z tym samym dowódcą.</li></ul>
+<p>Ceny to poziom podstawowy, bez ulepszeń broni, zbroi i doświadczenia. Sprawdź sumę w menu gry.</p>
+<h2>5. Gotowe zestawy</h2>
+<p><b>Grasz sam przeciw Claude, który się nie poddaje:</b></p>
+<pre class="code">.venv\Scripts\python -m rome_ai.server --backend claude-code --effort medium --personality no_retreat</pre>
+<p><b>Hannibal kontra Scypion:</b></p>
+<pre class="code">.venv\Scripts\python -m rome_ai.server --backend claude-code --effort medium --sides all --personality 0=hannibal 1=scipio</pre>
+<p><b>4 drużyny, każdy wódz sam wybiera dowódcę:</b></p>
+<pre class="code">.venv\Scripts\python -m rome_ai.server --backend claude-code --effort medium --sides all --personality auto</pre>
+<p><b>Pełny cykl: Claude dobiera obie armie i nimi walczy:</b></p>
+<ol start="1"><li>Dobierz armię dla każdej strony:</li></ol>
+<pre class="code">.venv\Scripts\python -m rome_ai.recruit --faction carthage --enemy romans_scipii --budget 12000 --battle field
+.venv\Scripts\python -m rome_ai.recruit --faction romans_scipii --enemy carthage --budget 12000 --battle field</pre>
+<ol start="2"><li>Wyklikaj obie armie w custom battle według kart z folderu <code>armies\</code>.</li></ol>
+<ol start="3"><li>Uruchom serwer z dowódcami z kart, np.:</li></ol>
+<pre class="code">.venv\Scripts\python -m rome_ai.server --backend claude-code --effort medium --sides all --personality 0=hannibal 1=scipio</pre>
+<ol start="4"><li>Włącz bitwę i oglądaj.</li></ol>
+<h2>6. Gdzie co jest</h2>
+<div class="wrap"><table><tr><th>Plik albo folder</th><th>Co w nim jest</th></tr><tr><td><code>strategy.md</code></td><td>Standardowa taktyka, której trzyma się każdy wódz. Możesz ją edytować.</td></tr><tr><td><code>rules.md</code></td><td>Twarde fakty o grze.</td></tr><tr><td><code>personalities.md</code></td><td>Typy armii, przypisane do nich państwa i dowódcy. Tu dopiszesz własnego dowódcę.</td></tr><tr><td><code>battles.md</code></td><td>Kompendium bitew starożytności.</td></tr><tr><td><code>docs\commanders.pl.html</code></td><td>Katalog dowódców, typów armii i bitew do czytania.</td></tr><tr><td><code>armies\</code></td><td>Karty armii z doboru.</td></tr><tr><td><code>logs\</code></td><td>Zapis każdej bitwy: co wódz widział i co postanowił.</td></tr></table></div>
+<p>Wszystkie pliki <code>.md</code> serwer czyta przed każdą bitwą, więc restart nie jest potrzebny. Po edycji <code>personalities.md</code> albo <code>battles.md</code> sprawdź, czy wszystko się zgadza, i odśwież katalog:</p>
+<pre class="code">.venv\Scripts\python -m rome_ai.personalities check
+.venv\Scripts\python -m rome_ai.personalities docs</pre>
+<h2>7. Gdy coś nie działa</h2>
+<div class="wrap"><table><tr><th>Objaw</th><th>Co zrobić</th></tr><tr><td>W oknie serwera brak linii <code>hello: rome-remastered v1</code></td><td>Sprawdź, czy <code>dinput8.dll</code> leży w folderze gry, obok <code>Total War ROME REMASTERED.exe</code>.</td></tr><tr><td><code>general failed: You've hit your session limit</code></td><td>Skończył się limit Claude. Armią dowodzi AI gry; wódz wróci sam, gdy limit się odnowi.</td></tr><tr><td>Oddziały stoją bez rozkazów</td><td>Wklej log z okna serwera.</td></tr><tr><td>Chcesz wrócić do oryginalnego moda</td><td>Skopiuj <code>C:\rome-battle-ai\hook-windows\dinput8.dll</code> (wersja v0.3) do folderu gry i uruchamiaj serwer bez <code>--sides</code> i <code>--personality</code>.</td></tr></table></div>
+<p>Testy bez gry (nie zużywają limitu):</p>
+<pre class="code">.venv\Scripts\python -m rome_ai.personalities check
+.venv\Scripts\python -m rome_ai.recruit --check</pre></main></body></html>

@@ -2,7 +2,8 @@
 
 [English](README.md) | **Polski**
 
-> **Ten fork** (oryginał: [Cegli865/rome-battle-ai](https://github.com/Cegli865/rome-battle-ai)) dodaje:
+> **Ten fork** (oryginał: [Cegli865/rome-battle-ai](https://github.com/Cegli865/rome-battle-ai)) dodaje to, co
+> niżej - wszystkie tryby i ich komendy: [docs/guide.pl.html](docs/guide.pl.html) ([md](docs/guide.pl.md)):
 >
 > - **Poprawkę dla Windowsa:** backend `claude-code` padał na prawdziwym PC z Windowsem z błędem WinError 206.
 > - **Każda strona ma swojego wodza:** `--sides all` - Claude przeciw Claude albo 3-4 drużyny w custom battle

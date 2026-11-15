@@ -393,6 +393,16 @@ static int building_kind(uintptr_t b) {
 static struct { uintptr_t unit; int building, type; double t0, last_log, gone; float x, y; bool handed; } g_rams[MAX_RAMS];
 static uint32_t g_battle_type; /* BATTLE_TYPE_*, read at battle start */
 
+static int g_ai_alliance; /* defined below */
+
+/* The game's AI commands only its own side: with both sides taken (Claude vs Claude) a unit of the player's side is
+ * never handed to it for its siege equipment - nothing on that side would command it. */
+static bool game_ai_side(uintptr_t unit) {
+    for (int i = 0; i < g_nunits; i++)
+        if (g_units[i].ptr == unit) return g_units[i].alliance == g_ai_alliance;
+    return true;
+}
+
 static int ram_slot(uintptr_t unit) {
     for (int i = 0; i < MAX_RAMS; i++) if (g_rams[i].unit == unit) return i;
     return -1;
@@ -404,6 +414,7 @@ static bool ram_handed(uintptr_t unit) {
 }
 
 static void ram_watch(uintptr_t unit, int building, int type) {
+    if (!game_ai_side(unit)) return;
     int i = ram_slot(unit);
     if (i < 0) for (i = 0; i < MAX_RAMS && g_rams[i].unit; i++) {}
     if (i >= MAX_RAMS) return;
@@ -649,6 +660,7 @@ static int detect_ai_alliance(void) {
    from the start until the equipment is used, dropped or destroyed (rams_update gives it back then). In siege
    battles the artillery (type 4) too, until its ammunition runs out. */
 static void hand_siege_unit(uintptr_t unit) {
+    if (!game_ai_side(unit)) return;
     int type = -1;
     if (unit_engines(unit, &type) <= 0 || type < 0) return;
     if (type > 2 && !(type == 4 && g_battle_type == BATTLE_TYPE_SIEGE && unit_ammo(unit) != 0)) return;
@@ -665,15 +677,18 @@ static void hand_siege_unit(uintptr_t unit) {
     *(uint32_t *)(unit + OFF_UNIT_CONTROLLER) = CONTROLLER_AI;
 }
 
-static bool g_taken; /* the alliance is ours (take_control): units the game's AI takes back are retaken */
+/* alliances that are ours (take_control), one bit each: units the game's AI takes back are retaken. Usually only
+ * g_ai_alliance; the server takes the other side too for Claude vs Claude ("control" with "alliance"). */
+static unsigned g_taken_mask;
 static uintptr_t g_handed[MAX_UNITS]; /* units handed to the game's AI one by one ("control" with "unit") */
 static int g_nhanded;
 
-static void take_control(bool take) {
-    g_taken = take;
+static void take_control(int alliance, bool take) {
+    if (alliance < 0 || alliance >= MAX_ALLIANCES) return;
+    if (take) g_taken_mask |= 1u << alliance; else g_taken_mask &= ~(1u << alliance);
     for (int i = 0; i < g_nunits; i++) {
         unit_ref *u = &g_units[i];
-        if (u->alliance != g_ai_alliance) continue;
+        if (u->alliance != alliance) continue;
         if (take) hand_siege_unit(u->ptr);
         if (take && ram_handed(u->ptr)) continue; /* stays with the game's AI until its siege engine is used */
         uint32_t *c = (uint32_t *)(u->ptr + OFF_UNIT_CONTROLLER);
@@ -687,14 +702,21 @@ static void take_control(bool take) {
             *c = k < g_nsaved ? g_saved[k].controller : CONTROLLER_AI;
         }
     }
-    logf_("%s control of alliance %d", take ? "took" : "released", g_ai_alliance);
+    logf_("%s control of alliance %d", take ? "took" : "released", alliance);
+}
+
+/* Battle over or the server gone: every side we hold goes back to whoever had it (the game's AI, or the player). */
+static void release_all(void) {
+    unsigned m = g_taken_mask | (g_ai_alliance >= 0 ? 1u << g_ai_alliance : 0);
+    for (int a = 0; a < MAX_ALLIANCES; a++)
+        if (m >> a & 1) take_control(a, false);
 }
 
 static void battle_begin(void) {
     g_in_battle = true;
     g_nsaved = 0;
     g_nhanded = 0;
-    g_taken = false;
+    g_taken_mask = 0;
     g_battle_t0 = now_s();
     const char *env = getenv("ROME_AI_ALLIANCE");
     g_ai_alliance = env ? atoi(env) : detect_ai_alliance();
@@ -706,7 +728,7 @@ static void battle_begin(void) {
               g_units[i].alliance, g_units[i].army, g_units[i].index, rd_u32(g_units[i].ptr + OFF_UNIT_CONTROLLER),
               rd_u32(g_units[i].ptr + OFF_UNIT_MODE_FLAGS));
     }
-    if (!g_probe && g_ai_alliance >= 0 && g_connected) take_control(true);
+    if (!g_probe && g_ai_alliance >= 0 && g_connected) take_control(g_ai_alliance, true);
     if (g_probe) probe_dump_grid();
     /* Who attacks: byte 0 of each alliance is "defends" (custom battles 2026-10-29: AI attacking -> 0, AI defending
      * -> 1). The game itself (battle_state_inspection, 0x1436de0) takes as the attacking army the last alliance
@@ -877,7 +899,7 @@ static void probe_dump_grid(void) {
 
 static void battle_end(void) {
     memset(g_rams, 0, sizeof g_rams);
-    if (!g_probe && g_ai_alliance >= 0) take_control(false);
+    if (!g_probe) release_all();
     g_in_battle = false;
     idmap_reset();
     logf_("battle end");
@@ -1095,10 +1117,10 @@ static void send_building_status(void) {
  * alliance that is on the field and not ours, unless it was handed over on purpose (siege equipment, "control"
  * for one unit), and tell the server so it sends that unit its order again. */
 static void retake_units(void) {
-    if (!g_taken || g_ai_alliance < 0) return;
+    if (!g_taken_mask) return;
     for (int i = 0; i < g_nunits; i++) {
         unit_ref *u = &g_units[i];
-        if (u->alliance != g_ai_alliance || !unit_on_field(u->ptr) || ram_handed(u->ptr)) continue;
+        if (!(g_taken_mask >> u->alliance & 1) || !unit_on_field(u->ptr) || ram_handed(u->ptr)) continue;
         uint32_t *c = (uint32_t *)(u->ptr + OFF_UNIT_CONTROLLER);
         if (*c == CONTROLLER_SCRIPT) continue;
         int k = 0;
@@ -1114,10 +1136,10 @@ static void handle_order(const char *line) {
     mj_obj o;
     if (!mj_parse_flat(line, &o)) return;
     const char *type = mj_str(&o, "type");
-    if (type && strcmp(type, "control") == 0) { /* {"type":"control","take":true[,"unit":id]} */
+    if (type && strcmp(type, "control") == 0) { /* {"type":"control","take":true[,"unit":id][,"alliance":n]} */
         int uid = (int)mj_num(&o, "unit", -1);
         if (uid < 0) {
-            take_control(mj_bool(&o, "take", true));
+            take_control((int)mj_num(&o, "alliance", g_ai_alliance), mj_bool(&o, "take", true));
         } else if (unit_by_id(uid)) { /* one unit: hand it to the game's AI or take it back */
             uintptr_t ptr = unit_by_id(uid)->ptr;
             uint32_t *c = (uint32_t *)(ptr + OFF_UNIT_CONTROLLER);
@@ -1375,7 +1397,7 @@ static void hooked_tick(void *self) {
     }
     if (g_release_pending) {
         g_release_pending = false;
-        if (!g_probe && g_ai_alliance >= 0) take_control(false);
+        if (!g_probe) release_all();
         logf_("AI server lost - the game's own AI commands alliance %d again", g_ai_alliance);
     }
     if (g_terrain_pending && g_connected) {

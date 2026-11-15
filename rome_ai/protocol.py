@@ -361,11 +361,13 @@ class Orders(BaseModel):
 
 
 class Control(BaseModel):
-    """Take the AI alliance away from the game's AI (take=True) or hand it back; with unit=id only that unit."""
+    """Take the AI alliance away from the game's AI (take=True) or hand it back; with unit=id only that unit.
+    With alliance=n that alliance instead of the one the game's AI commands (Claude vs Claude: one per side)."""
 
     type: Literal["control"] = "control"
     take: bool
     unit: int | None = None
+    alliance: int | None = None
 
 
 def dump(msg: BaseModel) -> bytes:

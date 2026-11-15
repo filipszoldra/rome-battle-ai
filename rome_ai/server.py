@@ -53,8 +53,18 @@ PRED_SNAP_EVERY = 5.0  # s of battle time between saved predictions (checked 5 a
 CONTACT_INTERVAL = 4.0  # s between plans (from the start of one to the start of the next) while in contact
 
 
+class _SideLog(logging.LoggerAdapter):
+    """With --sides both, every line of a session says which side's general it is about."""
+
+    def process(self, msg, kwargs):
+        s = self.extra["session"]
+        return (f"[alliance {s.start.ai_alliance}] {msg}" if s.multi and s.start else msg), kwargs
+
+
 class BattleSession:
-    def __init__(self, general: General, plan_interval: float, writer: asyncio.StreamWriter) -> None:
+    def __init__(self, general: General, plan_interval: float, writer: asyncio.StreamWriter, multi: bool = False) -> None:
+        self.multi = multi  # one of several sessions (one per side): own log file, tagged log lines
+        self.log = _SideLog(log, {"session": self})
         self.general = general
         self.plan_interval = plan_interval
         self.writer = writer
@@ -102,13 +112,13 @@ class BattleSession:
         LOG_DIR.mkdir(exist_ok=True)
         if self.battle_log:
             self.battle_log.close()
-        path = LOG_DIR / time.strftime("battle-%Y%m%d-%H%M%S.jsonl")
+        path = LOG_DIR / time.strftime(f"battle-%Y%m%d-%H%M%S{f'-alliance{msg.ai_alliance}' if self.multi else ''}.jsonl")
         self.battle_log = open(path, "a", encoding="utf-8")
         self._log_event("battle_start", start=msg.model_dump(), rules=self.general.rules, strategy=self.general.strategy,
                         general=self.general.describe() if hasattr(self.general, "describe") else None)
-        log.info("battle log: %s", path)
+        self.log.info("battle log: %s", path)
         self.planner = asyncio.create_task(self._plan_loop())
-        log.info(
+        self.log.info(
             "battle started (%s, %s), AI controls alliance %d, %d rules from %s, %d strategy points from %s",
             "settlement" if msg.map.settlement else f"type {msg.battle_type}",
             "AI attacks" if not msg.player_is_attacker else "AI defends",
@@ -151,7 +161,7 @@ class BattleSession:
                 e = nearest(u, foes)
                 under_fire = u.action != "melee" and (e is None or dist(u, e) > UNDER_FIRE_NO_ENEMY_WITHIN)
                 if under_fire and lost >= max(5, REPLAN_LOSSES * u.max_soldiers):
-                    log.info("unit #%d under fire, lost %d men in %.0fs - asking the general now", u.id, lost, LOSS_WINDOW)
+                    self.log.info("unit #%d under fire, lost %d men in %.0fs - asking the general now", u.id, lost, LOSS_WINDOW)
                     self.replan.set()
                     break
 
@@ -180,11 +190,11 @@ class BattleSession:
             return n / len(units)
 
         ai_in, foe_in = share_inside(mine), share_inside(theirs)
-        log.info("siege sides: %.0f%% of the AI's units and %.0f%% of the enemy's stand in the town", ai_in * 100, foe_in * 100)
+        self.log.info("siege sides: %.0f%% of the AI's units and %.0f%% of the enemy's stand in the town", ai_in * 100, foe_in * 100)
         if abs(ai_in - foe_in) >= 0.3:
             ai_defends = ai_in > foe_in
             if self.start.player_is_attacker != ai_defends:
-                log.info("siege sides corrected from positions: AI %s the town", "defends" if ai_defends else "attacks")
+                self.log.info("siege sides corrected from positions: AI %s the town", "defends" if ai_defends else "attacks")
             self.start.player_is_attacker = ai_defends
             self._log_event("sides", ai_defends=ai_defends, ai_inside=round(ai_in, 2), enemy_inside=round(foe_in, 2))
 
@@ -270,7 +280,7 @@ class BattleSession:
             if u.rally >= 0:
                 u.category = "general"
         if self.state is not None and msg.stage != self.state.stage:
-            log.info("battle stage %d -> %d%s", self.state.stage, msg.stage,
+            self.log.info("battle stage %d -> %d%s", self.state.stage, msg.stage,
                      " (deployment: no plans until the battle starts)" if msg.stage in DEPLOYMENT_STAGES else "")
             self._log_event("stage", t=msg.t, old=self.state.stage, new=msg.stage)
             if self.state.stage in DEPLOYMENT_STAGES and self.plan is not None:
@@ -293,7 +303,7 @@ class BattleSession:
         if orders:
             self.writer.write(dump(Orders(orders=orders)))
             await self.writer.drain()
-            log.debug("t=%.1f sent %d orders", msg.t, len(orders))
+            self.log.debug("t=%.1f sent %d orders", msg.t, len(orders))
 
     def _calibrate(self, msg: State) -> None:
         """Every ~5 s: remember what the predictions say, and log how well older ones came true."""
@@ -318,7 +328,7 @@ class BattleSession:
 
     def retaken(self, unit: int) -> None:
         """The hook took a unit back from the game's AI: send it our order again on the next tick."""
-        log.info("unit #%d was taken back from the game's AI - re-sending its order", unit)
+        self.log.info("unit #%d was taken back from the game's AI - re-sending its order", unit)
         self._log_event("retaken", t=self.state.t if self.state else None, unit=unit)
         if self.executor is not None:
             self.executor.last.pop(unit, None)
@@ -389,13 +399,13 @@ class BattleSession:
                 prompt = _user_message(self.start, self.state, self.plan)
                 plan = await self.general.plan(self.start, self.state, self.plan)
             except Exception as e:  # keep the last plan; the executor keeps acting on it
-                log.warning("general failed: %s", e)
+                self.log.warning("general failed: %s", e)
                 self._log_event("plan_error", error=str(e))
                 self.failures += 1
                 if self.failures >= FAILS_BEFORE_FALLBACK and not self.fallback:
                     self.fallback = True
-                    self.writer.write(dump(Control(take=False)))
-                    log.warning("%d failed plans in a row - handing the army back to the game's own AI", self.failures)
+                    self.writer.write(dump(self.control(False)))
+                    self.log.warning("%d failed plans in a row - handing the army back to the game's own AI", self.failures)
                     self._log_event("fallback", on=True, error=str(e))
                 if self.fallback:  # don't hammer a hit usage limit; try again in a minute
                     await asyncio.sleep(60)
@@ -404,8 +414,8 @@ class BattleSession:
                 self.failures = 0
                 if self.fallback:
                     self.fallback = False
-                    self.writer.write(dump(Control(take=True)))
-                    log.info("the general answers again - taking the army back from the game's AI")
+                    self.writer.write(dump(self.control(True)))
+                    self.log.info("the general answers again - taking the army back from the game's AI")
                     self._log_event("fallback", on=False)
                 self.plan = plan
                 self.plan_since = self.state.t if self.state else None
@@ -424,7 +434,7 @@ class BattleSession:
                     self.last_rate_limit = rl
                     self._log_event("rate_limit", info=rl)
                 self.skipped = 0
-                log.info(
+                self.log.info(
                     "new plan (%.1fs, %s): %s | %s",
                     time.monotonic() - began,
                     why,
@@ -437,16 +447,21 @@ class BattleSession:
             except asyncio.TimeoutError:
                 pass
 
+    def control(self, take: bool) -> Control:
+        """Take this session's side from the game's AI (or hand it back). Naming the alliance is what lets the
+        hook hold both sides; an older hook ignores it and uses the side the game's AI commands."""
+        return Control(take=take, alliance=self.start.ai_alliance if self.start else None)
+
     def pause(self) -> None:
         if self.planner is not None:
             self.planner.cancel()
             self.planner = None
-            log.info("game paused - general waits")
+            self.log.info("game paused - general waits")
 
     def resume(self) -> None:
         if self.start is not None and self.planner is None:
             self.planner = asyncio.create_task(self._plan_loop())
-            log.info("game resumed")
+            self.log.info("game resumed")
 
     def stop(self) -> None:
         if self.planner is not None:
@@ -460,11 +475,15 @@ class BattleSession:
             asyncio.get_event_loop().create_task(close())
 
 
-def make_handler(general: General, plan_interval: float):
+def make_handler(generals: list[General], plan_interval: float):
+    """One session per general: the AI side only, or (--sides both) each side of the battle with its own general.
+    Every session gets every message from the game and sees the battle from its own side."""
+
     async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         peer = writer.get_extra_info("peername")
         log.info("game connected from %s", peer)
-        session = BattleSession(general, plan_interval, writer)
+        multi = len(generals) > 1
+        sessions = [BattleSession(g, plan_interval, writer, multi) for g in generals]
         try:
             while line := await reader.readline():
                 try:
@@ -472,6 +491,7 @@ def make_handler(general: General, plan_interval: float):
                 except Exception as e:
                     log.warning("bad message %r: %s", line[:200], e)
                     continue
+                started = [s for s in sessions if s.start is not None]
                 if isinstance(msg, Hello):
                     log.info("hello: %s v%d%s", msg.game, msg.version, f", game at {msg.exe}" if msg.exe else "")
                     if msg.exe:
@@ -479,94 +499,117 @@ def make_handler(general: General, plan_interval: float):
 
                         use_game_exe(msg.exe)
                 elif isinstance(msg, BattleStart):
-                    session.on_battle_start(msg)
-                    writer.write(dump(Control(take=True)))  # hand our alliance from the game AI to us
+                    starts = [msg]
+                    if multi:
+                        # the hook describes the battle from the side the game's AI commands; the other side sees
+                        # it the other way round. ponytail: two alliances assumed (in a battle of three or more
+                        # sides the second general gets only one of the others)
+                        other = 0 if msg.ai_alliance != 0 else 1
+                        starts.append(msg.model_copy(deep=True, update={
+                            "ai_alliance": other, "player_is_attacker": not msg.player_is_attacker, "can_withdraw": None}))
+                    for s, st in zip(sessions, starts):
+                        s.on_battle_start(st)
+                        writer.write(dump(s.control(True)))  # hand this side from the game AI to its general
                 elif isinstance(msg, State):
-                    await session.on_state(msg)
+                    msgs = [msg] + [msg.model_copy(deep=True) for _ in sessions[1:]]  # each session edits its copy
+                    for s, m in zip(sessions, msgs):
+                        await s.on_state(m)
                 elif isinstance(msg, RawState):
                     log.debug("raw_state with %d units (hook can't read unit fields yet)", len(msg.units))
                 elif isinstance(msg, TerrainMsg):
-                    if session.start is not None:
-                        session.start.terrain = msg
-                        session.start.briefing = None  # rebuilt with the map on the next plan
+                    for s in started:
+                        s.start.terrain = msg
+                        s.start.briefing = None  # rebuilt with the map on the next plan
                     log.info("terrain received: %dx%d samples, heights %.0f..%.0f m", msg.n, msg.n,
                              min(msg.heights_dm) / 10, max(msg.heights_dm) / 10)
                 elif isinstance(msg, TerrainMasks):
-                    if session.start is not None:
-                        session.start.masks = msg
-                        session.start.briefing = None
-                        session._log_event("terrain_masks", masks=msg.model_dump())  # for offline analysis of towns
+                    for s in started:
+                        s.start.masks = msg
+                        s.start.briefing = None
+                        s._log_event("terrain_masks", masks=msg.model_dump())  # for offline analysis of towns
                     log.info("terrain masks received (obstacles, settlement)")
                 elif isinstance(msg, Buildings):
-                    if session.start is not None:
-                        from .siege import locate
+                    from .siege import locate
 
-                        session.start.buildings, used = locate(msg.items, session.start.masks)
-                        session.start.briefing = None
-                        session._log_event("buildings", items=msg.items, position_offset=used)
+                    for s in started:  # each side its own Building objects: building_status updates them per session
+                        s.start.buildings, used = locate(msg.items, s.start.masks)
+                        s.start.briefing = None
+                        s._log_event("buildings", items=msg.items, position_offset=used)
+                    if started:
                         kinds = {}
-                        for b in session.start.buildings.values():
+                        for b in started[0].start.buildings.values():
                             kinds[b.kind] = kinds.get(b.kind, 0) + 1
                         log.info("buildings: %s (positions %s)", kinds, "found" if used else "unknown")
                 elif isinstance(msg, Streets):
-                    if session.start is not None:
-                        session.start.streets = msg.instances
-                        session.start.town_graph, session.start.briefing = None, None
+                    for s in started:
+                        s.start.streets = msg.instances
+                        s.start.town_graph, s.start.briefing = None, None
+                        s._log_event("streets", instances=msg.instances)
+                    if started:
                         n = sum(len(i.get("nodes", [])) for i in msg.instances)
                         log.info("street graph: %d plan instance(s), %d nodes", len(msg.instances), n)
-                        session._log_event("streets", instances=msg.instances)
                 elif isinstance(msg, Crossings):
                     river = [c for c in msg.links if c.get("kind") in (1, 4)]
                     log.info("map area links: %d, river crossings: %d", len(msg.links), len(river))
-                    session._log_event("crossings", links=msg.links)
-                    if session.start is not None:
-                        session.start.crossings = msg.links
-                        session.start.briefing = None  # rebuilt with the river
+                    for s in sessions:
+                        s._log_event("crossings", links=msg.links)
+                        if s.start is not None:
+                            s.start.crossings = msg.links
+                            s.start.briefing = None  # rebuilt with the river
                 elif isinstance(msg, PlatformsRaw):
                     log.info("other platforms: %d of %d (raw, logged)", len(msg.platforms), msg.count)
-                    session._log_event("platforms_raw", count=msg.count, platforms=msg.platforms)
+                    for s in sessions:
+                        s._log_event("platforms_raw", count=msg.count, platforms=msg.platforms)
                 elif isinstance(msg, WallsRaw):
-                    if session.start is not None:
-                        session.start.wall_platforms = msg.platforms
-                        session.start.town_graph, session.start.briefing = None, None
+                    for s in sessions:
+                        if s.start is not None:
+                            s.start.wall_platforms = msg.platforms
+                            s.start.town_graph, s.start.briefing = None, None
+                        s._log_event("walls_raw", platforms=msg.platforms)
                     log.info("wall platforms: %d (raw, logged)", len(msg.platforms))
-                    session._log_event("walls_raw", platforms=msg.platforms)
                 elif isinstance(msg, BuildingStatus):
-                    if session.start is not None:
+                    for s in started:
                         changed = []
                         for bid, dmg, hp, flag, *gate in msg.items:
-                            b = session.start.buildings.get(bid)
+                            b = s.start.buildings.get(bid)
                             if b is not None:
                                 opened, owner = (gate + [-1, -1])[:2]
                                 if (b.damage, b.flag, b.open, b.owner) != (dmg, flag, opened, owner):
                                     changed.append([bid, dmg, hp, flag, opened, owner])
                                 b.damage, b.max_hp, b.flag, b.open, b.owner = dmg, hp, flag, opened, owner
                         if changed:
-                            session._log_event("building_status", changed=changed)
+                            s._log_event("building_status", changed=changed)
                 elif isinstance(msg, Log):
                     log.info("[hook] %s", msg.msg)
                 elif isinstance(msg, Pause):
-                    session.pause()
+                    for s in sessions:
+                        s.pause()
                 elif isinstance(msg, Retaken):
-                    session.retaken(msg.unit)
+                    alliance = msg.unit // 10000 - 1  # unit ids are (alliance + 1) * 10000 + ...
+                    for s in started:
+                        if s.start.ai_alliance == alliance or not multi:
+                            s.retaken(msg.unit)
                 elif isinstance(msg, Resume):
-                    session.resume()
-                    writer.write(dump(Control(take=True)))
+                    for s in sessions:
+                        s.resume()
+                        writer.write(dump(s.control(True)))
                 elif isinstance(msg, BattleEnd):
                     log.info("battle over, winner alliance %s", msg.winner_alliance)
-                    session.stop()
-                    session._close_general()
+                    for s in sessions:
+                        s.stop()
+                        s._close_general()
         finally:
-            session.stop()
-            session._close_general()
+            for s in sessions:
+                s.stop()
+                s._close_general()
             writer.close()
             log.info("game disconnected")
 
     return handle
 
 
-async def serve(host: str, port: int, general: General, plan_interval: float) -> None:
-    server = await asyncio.start_server(make_handler(general, plan_interval), host, port, limit=MAX_LINE)
+async def serve(host: str, port: int, generals: list[General], plan_interval: float) -> None:
+    server = await asyncio.start_server(make_handler(generals, plan_interval), host, port, limit=MAX_LINE)
     log.info("listening on %s:%d", host, port)
     async with server:
         await server.serve_forever()
@@ -584,6 +627,9 @@ def main() -> None:
                    help="claude-code: start a new claude process for every plan instead of one per battle")
     p.add_argument("--rules", type=Path, help=f"game rules file (default {RULES_FILE}; strategy.md next to it is always used)")
     p.add_argument("--plan-interval", type=float, default=8.0, help=f"seconds between plans (while any unit is within {CONTACT_M:.0f} m of the enemy: {CONTACT_INTERVAL:.0f} s)")
+    p.add_argument("--sides", choices=["ai", "both"], default="ai",
+                   help="ai: the model commands the side of the game's AI; both: each side gets its own general "
+                        "(Claude vs Claude, the player only watches)")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=7777)
     p.add_argument("-v", "--verbose", action="store_true")
@@ -593,8 +639,9 @@ def main() -> None:
         logging.getLogger(noisy).setLevel(logging.WARNING)
     if a.rules:
         RULES_FILE = a.rules
-    general = make_general(a.backend, a.model, a.base_url, a.effort, a.claude_bin, a.fresh_process)
-    asyncio.run(serve(a.host, a.port, general, a.plan_interval))
+    generals = [make_general(a.backend, a.model, a.base_url, a.effort, a.claude_bin, a.fresh_process)
+                for _ in range(2 if a.sides == "both" else 1)]
+    asyncio.run(serve(a.host, a.port, generals, a.plan_interval))
 
 
 if __name__ == "__main__":

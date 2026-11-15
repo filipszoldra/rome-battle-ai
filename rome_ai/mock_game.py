@@ -202,7 +202,7 @@ class Sim:
         return State(t=round(self.t, 2), units=[u.to_wire() for u in self.units.values()])
 
 
-async def run(host: str, port: int, speed: float, limit: float, seed: int) -> None:
+async def run(host: str, port: int, speed: float, limit: float, seed: int, both: bool = False) -> None:
     rng = random.Random(seed)
     sim = Sim(deploy(rng))
     reader, writer = await asyncio.open_connection(host, port)
@@ -224,7 +224,8 @@ async def run(host: str, port: int, speed: float, limit: float, seed: int) -> No
     dt, report_every, next_report = 0.1, 0.5, 0.0
     try:
         while sim.t < limit and sim.winner() is None:
-            sim.player_ai()
+            if not both:  # --both: the server commands alliance 0 too
+                sim.player_ai()
             sim.step(dt)
             if sim.t >= next_report:
                 next_report += report_every
@@ -259,8 +260,9 @@ def main() -> None:
     p.add_argument("--speed", type=float, default=1.0, help="simulation speed multiplier")
     p.add_argument("--limit", type=float, default=900.0, help="battle time limit, seconds")
     p.add_argument("--seed", type=int, default=1)
+    p.add_argument("--both", action="store_true", help="no scripted player: for a server run with --sides both")
     a = p.parse_args()
-    asyncio.run(run(a.host, a.port, a.speed, a.limit, a.seed))
+    asyncio.run(run(a.host, a.port, a.speed, a.limit, a.seed, a.both))
 
 
 if __name__ == "__main__":

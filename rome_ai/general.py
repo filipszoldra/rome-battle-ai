@@ -393,6 +393,16 @@ class ClaudeGeneral:
         return response.parsed_output
 
 
+def _system_prompt_file(text: str) -> str:
+    """Windows caps a command line at 32767 chars; the system prompt goes through a file instead."""
+    import tempfile
+
+    path = os.path.join(tempfile.gettempdir(), "rome_ai_system_prompt.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    return path
+
+
 def _find_claude_cli() -> str:
     import glob
     import shutil
@@ -476,7 +486,7 @@ class ClaudeCodeGeneral:
             args, env = self._args()
             self.proc = await asyncio.create_subprocess_exec(
                 self.bin, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
-                "--system-prompt", system, *args,
+                "--system-prompt-file", _system_prompt_file(system), *args,
                 stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
                 cwd=os.path.expanduser("~"), env=env, limit=64 * 1024 * 1024,
             )
@@ -544,7 +554,7 @@ class ClaudeCodeGeneral:
         proc = await asyncio.create_subprocess_exec(
             self.bin, "-p", _user_message(start, state, previous),
             "--output-format", "json",
-            "--system-prompt", system_prompt(self.rules, start.briefing, self.strategy),
+            "--system-prompt-file", _system_prompt_file(system_prompt(self.rules, start.briefing, self.strategy)),
             *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

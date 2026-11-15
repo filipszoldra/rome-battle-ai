@@ -145,7 +145,70 @@ def describe_type(name: str) -> str | None:
     return "; ".join(out)
 
 
-DEFAULT_FILE_SPACING = {"infantry": 1.2, "missile": 1.6, "cavalry": 2.4, "general": 2.4, "siege": 6.0, "other": 1.2}
+# Cultures of the base game's factions (descr_sm_factions.txt): an "ownership" line may name a culture instead of
+# the factions, and then means all of them.
+CULTURES = {
+    "roman": ["romans_julii", "romans_brutii", "romans_scipii", "romans_senate", "slave"],
+    "greek": ["macedon", "seleucid", "greek_cities", "thrace"],
+    "egyptian": ["egypt"],
+    "carthaginian": ["carthage", "numidia"],
+    "eastern": ["parthia", "pontus", "armenia"],
+    "barbarian": ["gauls", "germans", "britons", "dacia", "scythia", "spain"],
+}
+
+
+def owners(u: dict) -> set[str]:
+    """Factions that may have this unit type."""
+    out: set[str] = set()
+    for o in _nums(u.get("ownership", "")):
+        if o:
+            out.update(CULTURES.get(o, [o]))
+    return out
+
+
+@lru_cache(maxsize=1)
+def display_names() -> dict[str, str]:
+    """Unit names as the game's menus show them (text/export_units.txt, UTF-16), by dictionary key."""
+    try:
+        text = (GAME_DATA / "data/text/export_units.txt").read_text(encoding="utf-16")
+    except (OSError, UnicodeError):
+        return {}
+    out: dict[str, str] = {}
+    for line in text.splitlines():
+        if line.startswith("{") and "}" in line:
+            key, _, name = line[1:].partition("}")
+            if not key.endswith(("_descr", "_descr_short")):
+                out.setdefault(key.strip().lower(), name.strip())
+    return out
+
+
+LAND_CATEGORIES = ("infantry", "cavalry", "siege", "handler")
+
+
+def custom_roster(faction: str) -> list[dict]:
+    """Unit types the faction may pick in a custom battle of the base game: custom battle cost (stat_cost, 6th
+    value), the name shown in the game's menu, whether it is a general's bodyguard, and its stats."""
+    try:
+        base = _parse((GAME_DATA / EDU_FILES[0]).read_text(encoding="latin-1"))
+    except OSError:
+        return []
+    names = display_names()
+    out = []
+    for t, u in base.items():
+        attrs, cost = _nums(u.get("attributes", "")), _nums(u.get("stat_cost", ""))
+        if faction not in owners(u) or "no_custom" in attrs or u.get("category") not in LAND_CATEGORIES or len(cost) < 6:
+            continue
+        try:
+            price = int(cost[5])
+        except ValueError:
+            continue
+        key = (u.get("dictionary", "").split() or [""])[0].lower()
+        out.append({"type": t, "name": names.get(key, t), "cost": price, "category": u.get("category"),
+                    "general": "general_unit" in attrs, "stats": describe_type(t) or ""})
+    return sorted(out, key=lambda r: (r["category"], r["cost"], r["type"]))
+
+
+DEFAULT_FILE_SPACING ={"infantry": 1.2, "missile": 1.6, "cavalry": 2.4, "general": 2.4, "siege": 6.0, "other": 1.2}
 
 
 def file_spacing(name: str, category: str) -> float:

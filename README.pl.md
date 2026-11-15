@@ -2,6 +2,20 @@
 
 [English](README.md) | **Polski**
 
+> **Ten fork** (oryginał: [Cegli865/rome-battle-ai](https://github.com/Cegli865/rome-battle-ai)) dodaje:
+>
+> - **Poprawkę dla Windowsa:** backend `claude-code` padał na prawdziwym PC z Windowsem z błędem WinError 206.
+> - **Każda strona ma swojego wodza:** `--sides all` - Claude przeciw Claude albo 3-4 drużyny w custom battle
+>   (hook dla Windowsa w `hook-windows/` przejmuje kilka stron; kompilacja: MinGW-w64).
+> - **Dowódców:** `--personality` - 21 dowódców wzorowanych na historycznych wodzach (Hannibal, Cezar,
+>   Aleksander, Surena...), do tego `no_retreat` (domyślny wódz, który nigdy się nie wycofuje, a gdy bitwa jest
+>   przegrana, zabija jak najwięcej wrogów) i `berserker`. `--personality auto`: każdy wódz wybiera sam. Każdy
+>   wódz wie teraz też, jaką armią dowodzi i z jaką walczy (z typów jednostek), i zna bitwy starożytności między
+>   takimi armiami. Katalog: [docs/commanders.pl.html](docs/commanders.pl.html) ([md](docs/commanders.pl.md));
+>   źródła: [personalities.md](personalities.md), [battles.md](battles.md).
+> - **Dobór armii:** `python -m rome_ai.recruit --faction macedon --enemy romans_julii --budget 15000 --battle field`
+>   - Claude dobiera armię w budżecie custom battle i zapisuje kartę (HTML + MD) do wyklikania w menu.
+
 Rome: Total War od zawsze miało problem z AI w bitwach: oddziały stoją bezczynnie pod murami, taran zostaje
 sam pod bramą, generał szarżuje w pierwszej linii, a armia nie reaguje, gdy obchodzi się ją skrzydłem. Ten mod
 oddaje stronę komputera modelowi językowemu (domyślnie Claude). Model czyta przebieg bitwy, co kilka sekund

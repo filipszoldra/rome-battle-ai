@@ -89,9 +89,13 @@ class BattleSession:
         self.goal_since: dict[int, tuple[tuple[float, float], float]] = {}  # unit -> (move goal, battle time set)
         self.seen_on_field: set[int] = set()  # units that have been on the battlefield in this battle
         self.sides_checked = False
+        self.personality: str | None = None  # --personality for this side: a commander's id, "auto" or None
+        self.doctrine_ready = False  # army recognised, history and personality given to the general (this battle)
 
     def on_battle_start(self, msg: BattleStart) -> None:
         self.stop()
+        self.doctrine_ready = False
+        self.general.doctrine = ""
         self.start, self.executor, self.state, self.plan = msg, Executor(msg), None, None
         self.goal_since = {}
         self.seen_on_field = set()
@@ -373,11 +377,46 @@ class BattleSession:
                 return f"#{u.id} moved"
         return None
 
+    async def _prepare_doctrine(self) -> None:
+        """Which army this side leads and which it fights (from the unit types), the battles of history between such
+        armies, and the commander whose style the general follows (--personality; with auto he chooses one)."""
+        from . import personalities as P
+
+        ai = self.start.ai_alliance
+        units = list(self.state.units) + list(self.state.off_field)  # reinforcements not on the field yet count too
+        mine = [u.name for u in units if u.alliance == ai]
+        foe_sides = sorted({u.alliance for u in units if u.alliance != ai})
+        try:
+            my_army = P.identify(mine)
+            foes = [(a, P.identify([u.name for u in units if u.alliance == a])) for a in foe_sides]
+            commander, reason = self.personality, None
+            if commander == "auto":
+                situation = ("a siege - you " + ("defend the town" if self.start.player_is_attacker else "attack the town")
+                             if self.start.map.settlement else
+                             "a field battle - you " + ("defend" if self.start.player_is_attacker else "attack"))
+                commander, reason = await P.pick(self.general, my_army, foes, mine,
+                                                 [u.name for u in units if u.alliance != ai], situation)
+            self.general.doctrine = P.doctrine(my_army, foes, commander, reason)
+        except asyncio.CancelledError:
+            raise  # paused: tried again on resume
+        except Exception as e:  # never keep the battle from starting over this
+            self.log.warning("army recognition / personality failed: %s - the general goes without them", e)
+            my_army, foes, commander, reason = None, [], None, str(e)
+        self.doctrine_ready = True
+        types = P.army_types()
+        name = P.commanders()[commander].name if commander in P.commanders() else "standard (no personality)"
+        self.log.info("army: %s against %s; personality: %s%s",
+                      my_army.describe(types) if my_army else "?",
+                      "; ".join(a.describe(types) for _, a in foes) or "?", name, f" - {reason}" if reason else "")
+        self._log_event("doctrine", personality=commander, reason=reason, text=self.general.doctrine)
+
     async def _plan_loop(self) -> None:
         while True:
             if self.state is None:
                 await asyncio.sleep(0.2)
                 continue
+            if not self.doctrine_ready:  # once, before the first plan - usually while the armies deploy
+                await self._prepare_doctrine()
             if self._deploying():  # deployment: wait for the start of the battle, no model calls
                 await asyncio.sleep(0.5)
                 continue
@@ -475,7 +514,7 @@ class BattleSession:
             asyncio.get_event_loop().create_task(close())
 
 
-def make_handler(new_general, plan_interval: float, sides: str = "ai"):
+def make_handler(new_general, plan_interval: float, sides: str = "ai", personalities: dict | None = None):
     """One session per general: the AI side only, or (--sides all) every side of the battle with its own general.
     Every session gets every message from the game and sees the battle from its own side."""
 
@@ -524,6 +563,7 @@ def make_handler(new_general, plan_interval: float, sides: str = "ai"):
                     for a, st in starts.items():
                         if a not in pool:
                             pool[a] = BattleSession(new_general(), plan_interval, writer, multi)
+                        pool[a].personality = (personalities or {}).get(st.ai_alliance, (personalities or {}).get("*"))
                         pool[a].on_battle_start(st)
                         writer.write(dump(pool[a].control(True)))  # hand this side from the game AI to its general
                     if multi:
@@ -627,11 +667,30 @@ def make_handler(new_general, plan_interval: float, sides: str = "ai"):
     return handle
 
 
-async def serve(host: str, port: int, new_general, plan_interval: float, sides: str = "ai") -> None:
-    server = await asyncio.start_server(make_handler(new_general, plan_interval, sides), host, port, limit=MAX_LINE)
+async def serve(host: str, port: int, new_general, plan_interval: float, sides: str = "ai",
+                personalities: dict | None = None) -> None:
+    server = await asyncio.start_server(make_handler(new_general, plan_interval, sides, personalities), host, port, limit=MAX_LINE)
     log.info("listening on %s:%d", host, port)
     async with server:
         await server.serve_forever()
+
+
+def parse_personalities(specs: list[str] | None) -> dict:
+    """--personality hannibal | 0=hannibal 1=scipio | auto | 1=auto -> {"*" or alliance: commander id or "auto"}."""
+    from . import personalities as P
+
+    known = P.commanders()
+    out: dict = {}
+    for s in specs or []:
+        side, _, name = s.rpartition("=")
+        name = name.strip().lower()
+        if name != "auto" and name not in known:
+            raise SystemExit(f"--personality: unknown commander {name!r}. Choose one of: auto, " + ", ".join(known))
+        try:
+            out[int(side) if side else "*"] = name
+        except ValueError:
+            raise SystemExit(f"--personality: {s!r} - use NAME or SIDE=NAME, e.g. 0=hannibal")
+    return out
 
 
 def main() -> None:
@@ -649,6 +708,10 @@ def main() -> None:
     p.add_argument("--sides", choices=["ai", "all"], default="ai",
                    help="ai: the model commands the side of the game's AI; all: every side of the battle gets its own "
                         "general (Claude vs Claude, also 3-4 teams in a custom battle; the player only watches)")
+    p.add_argument("--personality", nargs="+", metavar="[SIDE=]NAME",
+                   help="the commander whose style a general follows (personalities.md, docs/commanders.html): "
+                        "e.g. no_retreat (every side), 0=hannibal 1=scipio, or auto (each general chooses one "
+                        "for his army and his enemy). Without it: the standard general")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=7777)
     p.add_argument("-v", "--verbose", action="store_true")
@@ -661,7 +724,7 @@ def main() -> None:
     def new_general() -> General:
         return make_general(a.backend, a.model, a.base_url, a.effort, a.claude_bin, a.fresh_process)
 
-    asyncio.run(serve(a.host, a.port, new_general, a.plan_interval, a.sides))
+    asyncio.run(serve(a.host, a.port, new_general, a.plan_interval, a.sides, parse_personalities(a.personality)))
 
 
 if __name__ == "__main__":

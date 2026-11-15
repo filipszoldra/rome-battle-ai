@@ -174,7 +174,7 @@ def rule_lines(text: str) -> str:
     return "\n".join(line.strip() for line in text.splitlines() if line.strip().startswith(("- ", "* ")))
 
 
-def system_prompt(rules: str, briefing: str | None = None, strategy: str = "") -> str:
+def system_prompt(rules: str, briefing: str | None = None, strategy: str = "", doctrine: str = "") -> str:
     """Everything that stays the same for a whole battle: instructions, game rules, strategy, maps.
     Kept byte-identical between plans so the CLI/API prompt cache can reuse it."""
     out = SYSTEM_PROMPT
@@ -190,6 +190,8 @@ def system_prompt(rules: str, briefing: str | None = None, strategy: str = "") -
             "\n\nSTRATEGY: advice from your commander, sound in most situations. Weigh it, but depart from it "
             "when the situation clearly calls for something else:\n" + strategy.strip()
         )
+    if doctrine:  # who you are, who the enemy is, your personality and the history of such battles
+        out += "\n\n" + doctrine.strip()
     if briefing:
         out += "\n\nBATTLEFIELD (fixed for this battle):\n" + briefing
     return out
@@ -362,6 +364,7 @@ def _artillery_reminder(start: BattleStart, state: State, previous: Plan | None)
 class ClaudeGeneral:
     rules = ""
     strategy = ""
+    doctrine = ""  # army, personality and history for this battle (personalities.doctrine), set by the server
     last_usage: dict | None = None
 
     def __init__(self, model: str = "claude-opus-5-5", effort: str = "low") -> None:
@@ -377,7 +380,7 @@ class ClaudeGeneral:
         response = await self.client.beta.messages.parse(
             model=self.model,
             max_tokens=16000,
-            system=system_prompt(self.rules, start.briefing, self.strategy),
+            system=system_prompt(self.rules, start.briefing, self.strategy, self.doctrine),
             messages=[{"role": "user", "content": _user_message(start, state, previous)}],
             output_format=Plan,
             output_config={"effort": self.effort},
@@ -393,12 +396,12 @@ class ClaudeGeneral:
         return response.parsed_output
 
 
-def _system_prompt_file(text: str, owner: object) -> str:
+def _system_prompt_file(text: str, tag: str) -> str:
     """Windows caps a command line at 32767 chars; the system prompt goes through a file instead.
-    One file per general: with --sides both two of them start their claude process at the same moment."""
+    One file per general and use: with --sides all several claude processes start at the same moment."""
     import tempfile
 
-    path = os.path.join(tempfile.gettempdir(), f"rome_ai_system_prompt_{os.getpid()}_{id(owner)}.txt")
+    path = os.path.join(tempfile.gettempdir(), f"rome_ai_system_prompt_{os.getpid()}_{tag}.txt")
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
     return path
@@ -428,6 +431,7 @@ NOTES_SHOWN = 5  # the general's notes to himself kept in every report: memory b
 class ClaudeCodeGeneral:
     rules = ""
     strategy = ""
+    doctrine = ""  # army, personality and history for this battle (personalities.doctrine), set by the server
     """Uses `claude -p` (headless Claude Code) with structured output. No tools, no session state."""
 
     def __init__(self, model: str = "claude-sonnet-5-5", effort: str = "low", binary: str | None = None,
@@ -476,7 +480,7 @@ class ClaudeCodeGeneral:
         if self.fresh_process:
             return await self._plan_fresh(start, state, previous)
         _ensure_briefing(start, state)  # before the system prompt, which carries it
-        system = system_prompt(self.rules, start.briefing, self.strategy)
+        system = system_prompt(self.rules, start.briefing, self.strategy, self.doctrine)
         key = (id(start), system)  # a new battle or a changed briefing (e.g. the town graph arrived)
         if self.proc is not None and self.proc_plans >= CONVERSATION_PLANS:
             log.info("conversation reached %d plans - starting a fresh one", self.proc_plans)
@@ -487,7 +491,7 @@ class ClaudeCodeGeneral:
             args, env = self._args()
             self.proc = await asyncio.create_subprocess_exec(
                 self.bin, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
-                "--system-prompt-file", _system_prompt_file(system, self), *args,
+                "--system-prompt-file", _system_prompt_file(system, str(id(self))), *args,
                 stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
                 cwd=os.path.expanduser("~"), env=env, limit=64 * 1024 * 1024,
             )
@@ -555,7 +559,7 @@ class ClaudeCodeGeneral:
         proc = await asyncio.create_subprocess_exec(
             self.bin, "-p", _user_message(start, state, previous),
             "--output-format", "json",
-            "--system-prompt-file", _system_prompt_file(system_prompt(self.rules, start.briefing, self.strategy), self),
+            "--system-prompt-file", _system_prompt_file(system_prompt(self.rules, start.briefing, self.strategy, self.doctrine), str(id(self))),
             *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -573,10 +577,40 @@ class ClaudeCodeGeneral:
             raise RuntimeError(f"claude -p: unexpected output {out[:300]!r} {err[:300]!r}")
         return self._finish(res)
 
+    async def ask(self, system: str, user: str, schema: dict, effort: str = "low", timeout: float = 180) -> dict:
+        """One question outside the battle's conversation (choosing a personality, recruiting an army): a fresh
+        `claude -p` with its own system prompt, the question on stdin (it may be long), the answer as JSON."""
+        effort_args = [] if "haiku" in self.model else ["--effort", effort]
+        proc = await asyncio.create_subprocess_exec(
+            self.bin, "-p", "--output-format", "json", "--model", self.model, *effort_args,
+            "--system-prompt-file", _system_prompt_file(system, f"ask{id(self)}"),
+            "--json-schema", json.dumps(schema), "--tools", "", "--no-session-persistence", "--strict-mcp-config",
+            "--setting-sources", "",
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            cwd=os.path.expanduser("~"),
+        )
+        try:
+            out, err = await asyncio.wait_for(proc.communicate(user.encode("utf-8")), timeout=timeout)
+        except asyncio.TimeoutError:
+            proc.kill()
+            raise RuntimeError("claude -p timed out")
+        try:
+            res = json.loads(out)
+        except json.JSONDecodeError:
+            raise RuntimeError(f"claude -p: unexpected output {out[:300]!r} {err[:300]!r}")
+        if res.get("is_error"):
+            raise RuntimeError(f"claude: {res.get('result')}")
+        data = res.get("structured_output")
+        if data is None:
+            text = res.get("result", "")
+            data = json.loads(text[text.find("{") : text.rfind("}") + 1])
+        return data
+
 
 class OpenAIGeneral:
     rules = ""
     strategy = ""
+    doctrine = ""  # army, personality and history for this battle (personalities.doctrine), set by the server
     """ChatGPT, DeepSeek, or a local model behind an OpenAI-compatible server (Ollama: --base-url http://localhost:11434/v1).
 
     json_schema=False is for servers that only have JSON mode (response_format json_object), e.g. DeepSeek:
@@ -598,7 +632,7 @@ class OpenAIGeneral:
         response = await self.client.chat.completions.parse(
             model=self.model,
             messages=[
-                {"role": "system", "content": system_prompt(self.rules, start.briefing, self.strategy)},
+                {"role": "system", "content": system_prompt(self.rules, start.briefing, self.strategy, self.doctrine)},
                 {"role": "user", "content": _user_message(start, state, previous)},
             ],
             response_format=Plan,
@@ -612,7 +646,7 @@ class OpenAIGeneral:
         from pydantic import ValidationError
 
         system = (
-            system_prompt(self.rules, start.briefing, self.strategy)
+            system_prompt(self.rules, start.briefing, self.strategy, self.doctrine)
             + "\n\nAnswer with a single json object that matches this JSON Schema (no other text):\n"
             + json.dumps(Plan.model_json_schema(), separators=(",", ":"))
             + '\nExample: {"intent":"Hold the hill, cavalry on the left flank.","groups":[{"name":"line","unit_ids":[65537,65538],'
@@ -645,6 +679,7 @@ class OpenAIGeneral:
 class RuleGeneral:
     rules = ""  # ignored
     strategy = ""
+    doctrine = ""  # army, personality and history for this battle (personalities.doctrine), set by the server
     """Heuristic general for offline tests: infantry and general attack the nearest main enemy, cavalry
     goes round a flank (waypoint) onto missile troops, missile units shoot from where they are."""
 

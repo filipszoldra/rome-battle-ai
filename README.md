@@ -2,6 +2,20 @@
 
 **English** | [Polski](README.pl.md)
 
+> **This fork** ([Cegli865/rome-battle-ai](https://github.com/Cegli865/rome-battle-ai) is the original) adds:
+>
+> - **Windows fix:** the `claude-code` backend failed on a real Windows PC with WinError 206.
+> - **Every side its own general:** `--sides all` - Claude against Claude, or 3-4 teams in a custom battle (the
+>   Windows hook in `hook-windows/` holds several sides; build it with MinGW-w64).
+> - **Commanders:** `--personality` - 21 commanders after historical generals (Hannibal, Caesar, Alexander,
+>   Surena...), plus `no_retreat` (the standard general who never retreats and, once the battle is lost, kills as
+>   many enemies as he can) and `berserker`. `--personality auto` lets each general choose. Every general now
+>   also knows which army he leads and fights (from the unit types) and the battles of antiquity between such
+>   armies. Catalogue: [docs/commanders.html](docs/commanders.html) ([md](docs/commanders.md)); sources:
+>   [personalities.md](personalities.md), [battles.md](battles.md).
+> - **Army picker:** `python -m rome_ai.recruit --faction macedon --enemy romans_julii --budget 15000 --battle field`
+>   - Claude picks an army within your custom battle budget and writes a sheet (HTML + MD) to click it together.
+
 Rome: Total War has always struggled with its battle AI: units idling under the walls, rams left alone at the
 gate, generals charging into the front line, armies that never react when you go round their flank. This mod
 hands the AI side of a battle to an LLM (Claude by default). The model reads the battle, makes a plan every few

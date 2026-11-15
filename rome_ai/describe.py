@@ -297,6 +297,15 @@ def _near_segment(p, a, b, r: float) -> bool:
     return math.hypot(p[0] - ax - t * dx, p[1] - ay - t * dy) <= r
 
 
+def enemy_sides(start: BattleStart, units) -> list[int]:
+    """The alliances other than ours with units in the battle: more than one in a battle of 3-4 teams."""
+    return sorted({u.alliance for u in units if u.alliance != start.ai_alliance})
+
+
+def _side_name(alliance: int) -> str:
+    return f"side #{alliance + 1}xxxx"  # unit ids are (alliance + 1) * 10000 + ...
+
+
 def describe_static(start: BattleStart, state: State) -> str:
     """The parts that don't change during a battle (terrain, town plan). Built once, sent in the cached
     system prompt instead of every request."""
@@ -318,7 +327,16 @@ def describe_static(start: BattleStart, state: State) -> str:
     ]
     from .units_db import describe_battle_units
 
+    foe_sides = enemy_sides(start, state.units)
+    if len(foe_sides) > 1:
+        lines.append(
+            f"THIS BATTLE HAS {len(foe_sides) + 1} SIDES, EACH AGAINST ALL THE OTHERS: you and {len(foe_sides)} enemy "
+            f"sides ({', '.join(_side_name(a) for a in foe_sides)}; the first digit of a unit id tells its side). The "
+            "enemy sides are enemies of each other too: they fight one another as well as you, and none of them is on "
+            "your side.")
     for side, title in ((start.ai_alliance, "YOUR"), (None, "ENEMY")):
+        if side is None and len(foe_sides) > 1:
+            continue  # the enemy sides are named above; their armies are not "main army and reinforcements"
         units = [u for u in state.units if (u.alliance == side if side is not None else u.alliance != start.ai_alliance)]
         armies: dict[int, list] = {}
         for u in units:
@@ -389,10 +407,19 @@ def describe(start: BattleStart, state: State, terrain=None, static: bool = True
                 "everything, before it can form up - waiting throws the ambush away."
                 if start.player_is_attacker else
                 "AMBUSH - YOU WERE AMBUSHED on the march: form up fast and fight your way out, or break through.")
+    foe_sides = enemy_sides(start, theirs_alive)
+    if len(foe_sides) > 1:  # one centre of all the enemies would lie between them, where nobody is
+        where = []
+        for a in foe_sides:
+            sx, sy = centroid([u for u in theirs_alive if u.alliance == a])
+            where.append(f"{_side_name(a)} centre ({sx:.0f},{sy:.0f}), {dist_xy(mx, my, sx, sy):.0f}m to the "
+                         f"{compass(sx - mx, sy - my)}")
+        enemy_where = f"{len(foe_sides)} enemy sides, also fighting each other: " + "; ".join(where)
+    else:
+        enemy_where = f"enemy centre ({ex:.0f},{ey:.0f}), {dist_xy(mx, my, ex, ey):.0f}m to the {compass(ex - mx, ey - my)}"
     lines = [
         f"Battle time {state.t:.0f}s. {role}",
-        f"Your army centre ({mx:.0f},{my:.0f}); enemy centre ({ex:.0f},{ey:.0f}), "
-        f"{dist_xy(mx, my, ex, ey):.0f}m to the {compass(ex - mx, ey - my)}.",
+        f"Your army centre ({mx:.0f},{my:.0f}); {enemy_where}.",
     ]
     if static:
         lines.insert(0, f"Map {start.map.width:.0f}x{start.map.height:.0f}m, x=east, y=north. "
@@ -411,8 +438,12 @@ def describe(start: BattleStart, state: State, terrain=None, static: bool = True
     lines += _off_field(state, start.ai_alliance, True)
 
     lines.append(f"\nENEMY UNITS ({len(theirs_alive)} fighting):")
-    lines += ["  " + _line(u, mine_alive, state.recent_losses.get(u.id, 0), velocity=state.velocity.get(u.id))
-              for u in theirs_alive]
+    for a in foe_sides or [None]:
+        side = [u for u in theirs_alive if a is None or u.alliance == a]
+        if len(foe_sides) > 1:
+            lines.append(f" {_side_name(a)} ({len(side)} fighting; at war with you and with the other enemy sides):")
+        lines += ["  " + _line(u, mine_alive, state.recent_losses.get(u.id, 0), velocity=state.velocity.get(u.id))
+                  for u in side]
     gone = [u for u in theirs if u not in theirs_alive]
     if gone:
         lines.append("  out of action: " + ", ".join(f"#{u.id} {u.name} ({u.action})" for u in gone))

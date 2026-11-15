@@ -778,9 +778,13 @@ static void battle_begin(void) {
     float half[2] = {0, 0};
     uintptr_t bmap = rd_ptr(ADDR_BATTLE_MAP_PTR);
     if (bmap) { rd(bmap + OFF_MAP_HALF_X, &half[0], 4); rd(bmap + OFF_MAP_HALF_Y, &half[1], 4); }
+    unsigned alliance_mask = 0; /* every side with units: with --sides all the server gives each its own general */
+    for (int i = 0; i < g_nunits; i++) alliance_mask |= 1u << g_units[i].alliance;
     send_line("{\"type\":\"battle_start\",\"ai_alliance\":%d,\"player_is_attacker\":%s,\"battle_type\":%u,"
+              "\"alliance_mask\":%u,\"attacker\":%d,"
               "\"can_withdraw\":%s,\"map\":{\"settlement\":%s,\"plaza\":%s,\"playable\":[%.1f,%.1f]}}\n",
-              g_ai_alliance, ai_attacks ? "false" : "true", btype, can_withdraw < 0 ? "null" : can_withdraw ? "true" : "false",
+              g_ai_alliance, ai_attacks ? "false" : "true", btype, alliance_mask, attacker,
+              can_withdraw < 0 ? "null" : can_withdraw ? "true" : "false",
               btype == BATTLE_TYPE_SIEGE ? "true" : "false", plaza, half[0], half[1]);
     g_terrain_pending = true; /* sent from the next tick, after battle_start is queued */
 }

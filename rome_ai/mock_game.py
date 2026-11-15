@@ -78,19 +78,26 @@ class SimUnit:
 ARMY = ["general", "hastati", "hastati", "triarii", "warband", "archers", "skirmishers", "equites", "heavy horse"]
 
 
-def deploy(rng: random.Random) -> list[SimUnit]:
+def deploy(rng: random.Random, sides: int = 2) -> list[SimUnit]:
+    """Each side's army 350 m from the centre, facing it; side a stands at a / sides of the way round."""
     units = []
-    for alliance, y0, heading in ((0, -350.0, 0.0), (1, 350.0, 180.0)):
+    for alliance in range(sides):
+        turn = math.radians(alliance * 360 / sides)  # 2 sides: alliance 0 south facing north, alliance 1 north
+
+        def at(x: float, y: float) -> tuple[float, float]:
+            return x * math.cos(turn) + y * math.sin(turn), -x * math.sin(turn) + y * math.cos(turn)
+
+        heading = alliance * 360 / sides
         uid = (alliance + 1) * 10000  # as the hook numbers them: (alliance + 1) * 10000 + army * 100 + n
         names = ARMY[:]
         rng.shuffle(names)
         foot = [n for n in names if TEMPLATES[n][0] in ("infantry", "missile")]
         horse = [n for n in names if n not in foot]
         for i, n in enumerate(foot):
-            units.append(SimUnit(uid, alliance, n, (i - (len(foot) - 1) / 2) * 45, y0, heading)); uid += 1
+            units.append(SimUnit(uid, alliance, n, *at((i - (len(foot) - 1) / 2) * 45, -350.0), heading)); uid += 1
         for i, n in enumerate(horse):
             side = -1 if i % 2 == 0 else 1
-            units.append(SimUnit(uid, alliance, n, side * (200 + 40 * (i // 2)), y0 - math.copysign(40, y0) * -1, heading)); uid += 1
+            units.append(SimUnit(uid, alliance, n, *at(side * (200 + 40 * (i // 2)), -390.0), heading)); uid += 1
     return units
 
 
@@ -202,12 +209,13 @@ class Sim:
         return State(t=round(self.t, 2), units=[u.to_wire() for u in self.units.values()])
 
 
-async def run(host: str, port: int, speed: float, limit: float, seed: int, both: bool = False) -> None:
+async def run(host: str, port: int, speed: float, limit: float, seed: int, both: bool = False, sides: int = 2) -> None:
     rng = random.Random(seed)
-    sim = Sim(deploy(rng))
+    sim = Sim(deploy(rng, sides))
     reader, writer = await asyncio.open_connection(host, port)
     writer.write(dump(Hello()))
-    writer.write(dump(BattleStart(ai_alliance=1, player_is_attacker=True, map=MapInfo(notes="open grassland, gentle slope"))))
+    writer.write(dump(BattleStart(ai_alliance=1, player_is_attacker=True, alliance_mask=(1 << sides) - 1, attacker=0,
+                                  map=MapInfo(notes="open grassland, gentle slope"))))
     await writer.drain()
 
     n_orders = 0
@@ -240,16 +248,18 @@ async def run(host: str, port: int, speed: float, limit: float, seed: int, both:
         await writer.drain()
         reader_task.cancel()
         writer.close()
-    print("\nRESULT:", {None: "time limit", -1: "mutual destruction", 0: "player (scripted) won", 1: "AI won"}[sim.winner()])
+    w = sim.winner()
+    print("\nRESULT:", {None: "time limit", -1: "mutual destruction", 0: "player (scripted) won", 1: "AI won"}.get(w, f"alliance {w} won"))
     print(_summary(sim))
 
 
 def _summary(sim: Sim) -> str:
     parts = []
-    for a in (0, 1):
+    for a in sorted({u.alliance for u in sim.units.values()}):
         us = [u for u in sim.units.values() if u.alliance == a]
         men = sum(u.soldiers for u in us if u.fighting)
-        parts.append(f"{'player' if a == 0 else 'AI'}: {int(men)} men, {sum(u.fighting for u in us)}/{len(us)} units")
+        name = {0: "player", 1: "AI"}.get(a, f"alliance {a}")
+        parts.append(f"{name}: {int(men)} men, {sum(u.fighting for u in us)}/{len(us)} units")
     return f"t={sim.t:5.0f}s  " + "  vs  ".join(parts)
 
 
@@ -260,9 +270,10 @@ def main() -> None:
     p.add_argument("--speed", type=float, default=1.0, help="simulation speed multiplier")
     p.add_argument("--limit", type=float, default=900.0, help="battle time limit, seconds")
     p.add_argument("--seed", type=int, default=1)
-    p.add_argument("--both", action="store_true", help="no scripted player: for a server run with --sides both")
+    p.add_argument("--both", action="store_true", help="no scripted player: for a server run with --sides all")
+    p.add_argument("--sides", type=int, default=2, help="number of armies, each its own side (more than 2: use --both)")
     a = p.parse_args()
-    asyncio.run(run(a.host, a.port, a.speed, a.limit, a.seed, a.both))
+    asyncio.run(run(a.host, a.port, a.speed, a.limit, a.seed, a.both, a.sides))
 
 
 if __name__ == "__main__":

@@ -87,6 +87,8 @@ class BattleStart(BaseModel):
     player_is_attacker: bool = True
     battle_type: int = 2  # game conflict type: 0 successful ambush, 1 failed ambush, 2 normal, 3 siege, 4 sally
     can_withdraw: bool | None = None  # may the AI's units leave this battle with the withdraw order (None = unknown)
+    alliance_mask: int | None = None  # one bit per side with units in the battle (None: an older hook, two sides)
+    attacker: int | None = None  # the attacking side (-1 none found, None: an older hook)
     map: MapInfo = MapInfo()
     # Filled in by the server when the hook's terrain message arrives (not part of the wire message).
     terrain: TerrainMsg | None = Field(default=None, exclude=True)

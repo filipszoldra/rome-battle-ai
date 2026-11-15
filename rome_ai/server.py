@@ -475,15 +475,16 @@ class BattleSession:
             asyncio.get_event_loop().create_task(close())
 
 
-def make_handler(generals: list[General], plan_interval: float):
-    """One session per general: the AI side only, or (--sides both) each side of the battle with its own general.
+def make_handler(new_general, plan_interval: float, sides: str = "ai"):
+    """One session per general: the AI side only, or (--sides all) every side of the battle with its own general.
     Every session gets every message from the game and sees the battle from its own side."""
 
     async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         peer = writer.get_extra_info("peername")
         log.info("game connected from %s", peer)
-        multi = len(generals) > 1
-        sessions = [BattleSession(g, plan_interval, writer, multi) for g in generals]
+        multi = sides == "all"
+        # side -> its session (and general), made when a battle with that side first starts; -1: the AI side
+        pool: dict[int, BattleSession] = {} if multi else {-1: BattleSession(new_general(), plan_interval, writer)}
         try:
             while line := await reader.readline():
                 try:
@@ -491,6 +492,7 @@ def make_handler(generals: list[General], plan_interval: float):
                 except Exception as e:
                     log.warning("bad message %r: %s", line[:200], e)
                     continue
+                sessions = list(pool.values())
                 started = [s for s in sessions if s.start is not None]
                 if isinstance(msg, Hello):
                     log.info("hello: %s v%d%s", msg.game, msg.version, f", game at {msg.exe}" if msg.exe else "")
@@ -499,20 +501,36 @@ def make_handler(generals: list[General], plan_interval: float):
 
                         use_game_exe(msg.exe)
                 elif isinstance(msg, BattleStart):
-                    starts = [msg]
+                    starts = {-1: msg}
                     if multi:
-                        # the hook describes the battle from the side the game's AI commands; the other side sees
-                        # it the other way round. ponytail: two alliances assumed (in a battle of three or more
-                        # sides the second general gets only one of the others)
-                        other = 0 if msg.ai_alliance != 0 else 1
-                        starts.append(msg.model_copy(deep=True, update={
-                            "ai_alliance": other, "player_is_attacker": not msg.player_is_attacker, "can_withdraw": None}))
-                    for s, st in zip(sessions, starts):
-                        s.on_battle_start(st)
-                        writer.write(dump(s.control(True)))  # hand this side from the game AI to its general
+                        # the hook describes the battle from the side the game's AI commands; every other side gets
+                        # its own copy, seen from that side. An older hook doesn't list the sides: two assumed.
+                        mask = msg.alliance_mask or (1 << msg.ai_alliance | 1 << (0 if msg.ai_alliance else 1))
+                        starts = {}
+                        for a in range(mask.bit_length()):
+                            if not mask >> a & 1:
+                                continue
+                            if a == msg.ai_alliance:
+                                starts[a] = msg
+                                continue
+                            enemy_attacks = msg.attacker != a if msg.attacker is not None else not msg.player_is_attacker
+                            starts[a] = msg.model_copy(deep=True, update={
+                                "ai_alliance": a, "player_is_attacker": enemy_attacks, "can_withdraw": None})
+                        for a, s in pool.items():  # a side from an earlier battle that is not in this one
+                            if a not in starts and s.start is not None:
+                                s.stop()
+                                s._close_general()
+                                s.start = None
+                    for a, st in starts.items():
+                        if a not in pool:
+                            pool[a] = BattleSession(new_general(), plan_interval, writer, multi)
+                        pool[a].on_battle_start(st)
+                        writer.write(dump(pool[a].control(True)))  # hand this side from the game AI to its general
+                    if multi:
+                        log.info("%d sides, each with its own general: alliances %s", len(starts), sorted(starts))
                 elif isinstance(msg, State):
-                    msgs = [msg] + [msg.model_copy(deep=True) for _ in sessions[1:]]  # each session edits its copy
-                    for s, m in zip(sessions, msgs):
+                    msgs = [msg] + [msg.model_copy(deep=True) for _ in started[1:]]  # each session edits its copy
+                    for s, m in zip(started, msgs):
                         await s.on_state(m)
                 elif isinstance(msg, RawState):
                     log.debug("raw_state with %d units (hook can't read unit fields yet)", len(msg.units))
@@ -551,17 +569,17 @@ def make_handler(generals: list[General], plan_interval: float):
                 elif isinstance(msg, Crossings):
                     river = [c for c in msg.links if c.get("kind") in (1, 4)]
                     log.info("map area links: %d, river crossings: %d", len(msg.links), len(river))
-                    for s in sessions:
+                    for s in started:
                         s._log_event("crossings", links=msg.links)
                         if s.start is not None:
                             s.start.crossings = msg.links
                             s.start.briefing = None  # rebuilt with the river
                 elif isinstance(msg, PlatformsRaw):
                     log.info("other platforms: %d of %d (raw, logged)", len(msg.platforms), msg.count)
-                    for s in sessions:
+                    for s in started:
                         s._log_event("platforms_raw", count=msg.count, platforms=msg.platforms)
                 elif isinstance(msg, WallsRaw):
-                    for s in sessions:
+                    for s in started:
                         if s.start is not None:
                             s.start.wall_platforms = msg.platforms
                             s.start.town_graph, s.start.briefing = None, None
@@ -586,11 +604,11 @@ def make_handler(generals: list[General], plan_interval: float):
                         s.pause()
                 elif isinstance(msg, Retaken):
                     alliance = msg.unit // 10000 - 1  # unit ids are (alliance + 1) * 10000 + ...
-                    for s in started:
+                    for s in started:  # the AI side's session alone, or the session of the unit's side
                         if s.start.ai_alliance == alliance or not multi:
                             s.retaken(msg.unit)
                 elif isinstance(msg, Resume):
-                    for s in sessions:
+                    for s in started:
                         s.resume()
                         writer.write(dump(s.control(True)))
                 elif isinstance(msg, BattleEnd):
@@ -599,7 +617,7 @@ def make_handler(generals: list[General], plan_interval: float):
                         s.stop()
                         s._close_general()
         finally:
-            for s in sessions:
+            for s in pool.values():
                 s.stop()
                 s._close_general()
             writer.close()
@@ -608,8 +626,8 @@ def make_handler(generals: list[General], plan_interval: float):
     return handle
 
 
-async def serve(host: str, port: int, generals: list[General], plan_interval: float) -> None:
-    server = await asyncio.start_server(make_handler(generals, plan_interval), host, port, limit=MAX_LINE)
+async def serve(host: str, port: int, new_general, plan_interval: float, sides: str = "ai") -> None:
+    server = await asyncio.start_server(make_handler(new_general, plan_interval, sides), host, port, limit=MAX_LINE)
     log.info("listening on %s:%d", host, port)
     async with server:
         await server.serve_forever()
@@ -627,9 +645,9 @@ def main() -> None:
                    help="claude-code: start a new claude process for every plan instead of one per battle")
     p.add_argument("--rules", type=Path, help=f"game rules file (default {RULES_FILE}; strategy.md next to it is always used)")
     p.add_argument("--plan-interval", type=float, default=8.0, help=f"seconds between plans (while any unit is within {CONTACT_M:.0f} m of the enemy: {CONTACT_INTERVAL:.0f} s)")
-    p.add_argument("--sides", choices=["ai", "both"], default="ai",
-                   help="ai: the model commands the side of the game's AI; both: each side gets its own general "
-                        "(Claude vs Claude, the player only watches)")
+    p.add_argument("--sides", choices=["ai", "all"], default="ai",
+                   help="ai: the model commands the side of the game's AI; all: every side of the battle gets its own "
+                        "general (Claude vs Claude, also 3-4 teams in a custom battle; the player only watches)")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=7777)
     p.add_argument("-v", "--verbose", action="store_true")
@@ -639,9 +657,10 @@ def main() -> None:
         logging.getLogger(noisy).setLevel(logging.WARNING)
     if a.rules:
         RULES_FILE = a.rules
-    generals = [make_general(a.backend, a.model, a.base_url, a.effort, a.claude_bin, a.fresh_process)
-                for _ in range(2 if a.sides == "both" else 1)]
-    asyncio.run(serve(a.host, a.port, generals, a.plan_interval))
+    def new_general() -> General:
+        return make_general(a.backend, a.model, a.base_url, a.effort, a.claude_bin, a.fresh_process)
+
+    asyncio.run(serve(a.host, a.port, new_general, a.plan_interval, a.sides))
 
 
 if __name__ == "__main__":

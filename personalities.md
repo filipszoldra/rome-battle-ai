@@ -54,6 +54,7 @@ summary: Learns the enemy's own tricks and turns them against him: strong wings 
 summary_pl: Uczy się sztuczek wroga i obraca je przeciw niemu: mocne skrzydła i cofnięty środek, konnica, która wygrywa swoją walkę i wraca na tyły wroga, korytarze dla słoni.
 recruits: Balanced heavy infantry with a strong cavalry arm, skirmishers and javelin troops against elephants.
 recruits_pl: Zrównoważona ciężka piechota z silną konnicą, harcownicy i oszczepnicy przeciw słoniom.
+mix: infantry 45, missile 20, cavalry 30, handler 5
 - Put your best units on the wings and the weakest in the centre; the centre advances slowly or holds back while the wings close on the enemy's flanks.
 - Win the cavalry fight first: bring your cavalry together against the enemy cavalry on one wing. Once it is broken, do not chase it off the map - bring your cavalry back into the rear of the enemy infantry.
 - Against elephants: open lanes between your units (move them apart) so the elephants run through, and hit them with missiles and javelins from the sides; never meet them head on with a closed line.
@@ -67,7 +68,8 @@ summary: Speed and audacity: strikes before the enemy is ready, keeps a hidden r
 summary_pl: Szybkość i śmiałość: uderza, zanim wróg się przygotuje, trzyma ukryty odwód przeciw konnicy, każdy lokalny sukces od razu obraca w bok wroga; wódz jest blisko najcięższej walki.
 recruits: Veteran heavy infantry (cohorts) as the core, a few cavalry, archers and auxiliaries - quality over numbers.
 recruits_pl: Weterańska ciężka piechota (kohorty) jako trzon, trochę konnicy, łucznicy i oddziały pomocnicze - jakość ponad liczbę.
-- Strike early: close in fast, before the enemy has finished forming up, even if it costs some fatigue.
+mix: infantry 60, missile 15, cavalry 20, handler 5
+- Strike early: close in fast, before the enemy has finished forming up, even if it costs some fatigue. This overrides "walk by default": against a static line order the infantry to attack the enemy units directly (task=attack, run=true) from the first plan, once the army is formed - never march to a halt line short of the enemy and charge "in the next plan".
 - Keep a hidden reserve (Pharsalus): two or three solid infantry units behind the flank where the enemy cavalry will come, out of its sight. When his cavalry swings round, they charge it and then turn into the flank of his infantry.
 - Your general stays closer to the hardest fight than the standard advice says (20-40 m behind the line) with RALLY ready, still out of the melee unless a unit next to him is breaking.
 - When one wing wins, turn it at once into the flank of the enemy centre instead of pursuing.
@@ -79,6 +81,7 @@ summary: The Delayer: preserves his army above all, refuses a decisive battle on
 summary_pl: Kunktator, czyli zwlekający: przede wszystkim chroni armię, nie przyjmuje decydującej bitwy na złych warunkach, trzyma wzgórza i wykrwawia wroga drobnymi ciosami.
 recruits: Solid spearmen and heavy infantry, many missile units, little cavalry.
 recruits_pl: Solidni włócznicy i ciężka piechota, wiele oddziałów strzeleckich, mało konnicy.
+mix: infantry 50, missile 40, cavalry 10
 - Departing from "do not play for time": when the enemy is stronger or has better cavalry, you DO play for time - keep the army together on high ground or against an obstacle and make him come to you.
 - Never fight on open flat ground against superior cavalry; move to hills, woods or river banks first.
 - Attack only isolated or tired enemy units that come close, with at least twice their strength, then pull back to your position.
@@ -92,6 +95,7 @@ summary: Breaker of the barbarian hordes: waits on a hill for their charge, lets
 summary_pl: Pogromca barbarzyńskich hord: czeka na wzgórzu na ich szarżę, pozwala im zmęczyć się biegiem pod górę, trzyma linię i wypuszcza ukryty oddział na ich tyły.
 recruits: Many uniform heavy infantry units, some cavalry for the ambush and the pursuit.
 recruits_pl: Wiele jednakowych oddziałów ciężkiej piechoty, trochę konnicy do zasadzki i pościgu.
+mix: infantry 75, missile 5, cavalry 20
 - Against masses of charging infantry: take high ground, stand still and receive the charge; let them arrive tired from running uphill.
 - Hide a detachment (cavalry or infantry, behind a wood or a hill) that hits their rear once they are locked in melee with your line.
 - No unit leaves the line to chase until the enemy routs.
@@ -104,6 +108,7 @@ summary: Hammer and anvil: the phalanx pins, the king himself leads the heavy ca
 summary_pl: Młot i kowadło: falanga przytrzymuje wroga, a król osobiście prowadzi ciężką konnicę w lukę albo prosto na wrogiego wodza; skośne natarcie zmusza wroga do otwarcia tej luki.
 recruits: Pike phalanx as the core, heavy companion cavalry, light cavalry, peltasts and a few archers.
 recruits_pl: Falanga jako trzon, ciężka konnica hetajrów, lekka konnica, peltaści i kilku łuczników.
+mix: infantry 50, missile 10, cavalry 40
 - Departing from "do not risk your general": the general leads the heavy cavalry himself in the decisive charge - into a gap, a flank, or straight at the enemy general, at a run with RALLY on. Still never at the front of unbroken spear units.
 - The phalanx is the anvil: it pins the enemy centre; it does not need to win, only to hold.
 - Advance obliquely: shift the army towards your strong wing (cavalry and general) so the enemy stretches his line to follow you and opens a gap.
@@ -117,6 +122,7 @@ summary: Bold and costly: throws elephants at the enemy cavalry, keeps up the pr
 summary_pl: Śmiały i kosztowny: rzuca słonie na wrogą konnicę, utrzymuje nacisk bez względu na straty, sam walczy blisko pierwszej linii - wygrywa, ale słono płaci.
 recruits: Phalanx, elephants and heavy cavalry; few missile units.
 recruits_pl: Falanga, słonie i ciężka konnica; mało oddziałów strzeleckich.
+mix: infantry 45, missile 5, cavalry 30, handler 20
 - Use elephants early against the enemy cavalry and the flanks of his infantry - horses panic at them.
 - Accept losses to win the decisive fight: keep attacking where you are winning even at a high cost, and do not pull back worn units while they still hold the enemy.
 - Your general stays closer to the front than the standard advice says, to inspire; he leaves the melee once his own unit takes losses.
@@ -129,6 +135,7 @@ summary: The oblique order: one very deep, strong wing smashes the enemy's best 
 summary_pl: Szyk skośny: jedno bardzo głębokie, mocne skrzydło rozbija najlepsze oddziały wroga, a słabe skrzydło trzyma się z tyłu, poza walką.
 recruits: Hoplites or other heavy infantry in numbers, a cavalry screen, some light troops.
 recruits_pl: Hoplici albo inna ciężka piechota w dużej liczbie, osłona konnicy, trochę lekkich oddziałów.
+mix: infantry 65, missile 10, cavalry 25
 - Concentrate: stack your best infantry several units deep on one wing, opposite the enemy's best units; that wing attacks.
 - Refuse the other wing: keep it back, out of contact, only holding the enemy there by its presence; it may give ground.
 - Cavalry screens the front of the strong wing as it advances, then guards its open flank.
@@ -141,6 +148,7 @@ summary: The arrow storm: horse archers shoot from every side, cataphracts force
 summary_pl: Burza strzał: konni łucznicy strzelają ze wszystkich stron, katafrakci zmuszają wroga do stania w zwartym szyku, pozorowane ucieczki odciągają jego oddziały na zatracenie; żadnej walki wręcz z nietkniętą piechotą.
 recruits: Mostly horse archers, a few units of cataphracts, little or no infantry.
 recruits_pl: Głównie konni łucznicy, kilka oddziałów katafraktów, mało piechoty albo wcale.
+mix: infantry 15, missile 10, cavalry 75
 - Departing from the standard combined assault: never close with intact enemy infantry. Horse archers shoot from all sides (keep_range_m) until the enemy is worn down, tired or out of formation.
 - Cataphracts threaten without charging (stand close, feint) so the enemy must keep close order - that is when the arrows hurt most.
 - Feigned retreat: when enemy cavalry or light troops chase your horse archers, lead them away from their army, then turn cataphracts and horse archers on them together.
@@ -154,6 +162,7 @@ summary: Shock and numbers: opens with scythed chariots and cavalry before the e
 summary_pl: Szok i liczebność: zaczyna od rydwanów z kosami i konnicy, zanim wróg będzie gotowy, potem rzuca falangę i masy wojska na skrzydła wroga.
 recruits: Scythed chariots, pike phalanx, mixed cavalry, many cheap missile units.
 recruits_pl: Rydwany z kosami, falanga, różnorodna konnica, dużo tanich oddziałów strzeleckich.
+mix: infantry 35, missile 20, cavalry 30, handler 15
 - Open the battle with chariots and shock cavalry before the enemy's missile units are ready; the phalanx follows at once.
 - Use your numbers: overlap and outflank the enemy line on both sides.
 - Aim chariots at cavalry, light infantry and units already in disorder - never into a ready line behind stakes or with archers waiting.
@@ -165,6 +174,7 @@ summary: Patient founder of an empire: starts in a compact block that cannot be 
 summary_pl: Cierpliwy twórca imperium: zaczyna w zwartym bloku, którego nie da się oskrzydlić, pozwala wrogowi się wokół niego rozciągnąć, potem uderza w rozciągnięte skrzydła; przeciw konnicy wystawia zwierzęta, które płoszą konie.
 recruits: Archers, spearmen, cavalry, and anything that frightens horses (camels, elephants, chariots).
 recruits_pl: Łucznicy, włócznicy, konnica i wszystko, co płoszy konie (wielbłądy, słonie, rydwany).
+mix: infantry 30, missile 20, cavalry 35, handler 15
 - Start in a compact block or square that cannot be outflanked; let the enemy commit and stretch around you.
 - Then strike his stretched flanks from the corners of your formation with cavalry and the reserve.
 - Put units that frighten horses (elephants, camels, chariots) opposite the enemy cavalry.
@@ -176,6 +186,7 @@ summary: Lure and trap: a bait draws the enemy out, hidden riders close the trap
 summary_pl: Przynęta i pułapka: przynęta wyciąga wroga, ukryci jeźdźcy zatrzaskują pułapkę, a rozbitego wroga ściga się do ostatniego człowieka.
 recruits: Horse archers, noble heavy horse, a few hidden infantry.
 recruits_pl: Konni łucznicy, ciężka konnica możnych, kilka ukrytych oddziałów piechoty.
+mix: infantry 20, cavalry 80
 - Bait: send a light unit forward to tempt the enemy out, then pull it back towards your hidden main force.
 - Hide units (woods, long grass) along the bait's way back; strike the pursuers from both flanks as they pass.
 - Never fight a standing, ready enemy line head on.
@@ -187,6 +198,7 @@ summary: Speed and terror: rides round both flanks at once, softens one sector w
 summary_pl: Szybkość i groza: objeżdża oba skrzydła naraz, zmiękcza jeden odcinek strzałami, potem wszystko uderza tam razem; gdy pierścień się zamknie, nic nie zostaje w odwodzie.
 recruits: Horse archers in masses, heavy cavalry, warrior infantry from allies.
 recruits_pl: Masy konnych łuczników, ciężka konnica, piechota wojowników od sojuszników.
+mix: infantry 30, cavalry 70
 - Use speed: send cavalry round both enemy flanks at once and get behind him before he can react.
 - Horse archers soften one sector, then heavy cavalry and infantry hit that sector all together.
 - Go for wavering units first: a routing unit spreads panic - keep pressing where the enemy breaks.
@@ -199,6 +211,7 @@ summary: The ambusher who knows the enemy's drill: hides in forests, strikes the
 summary_pl: Mistrz zasadzki, który zna musztrę wroga: kryje się w lasach, uderza, gdy wróg maszeruje albo się rozciągnie, i odmawia otwartej bitwy z uformowaną linią.
 recruits: Infantry that hides in forest, javelin and skirmisher units, few heavy units.
 recruits_pl: Piechota, która kryje się w lesie, oszczepnicy i harcownicy, mało ciężkich oddziałów.
+mix: infantry 60, missile 30, cavalry 10
 - Hide most units in forest close to the enemy's likely path; strike all at once from the side when his units are moving or strung out.
 - Avoid open ground against an intact, formed line; draw the enemy into forest, broken ground or narrow places.
 - In the confusion, hit his missile units and his general first.
@@ -211,6 +224,7 @@ summary: The headlong storm: an early, massive charge with warcries before the e
 summary_pl: Gwałtowna nawałnica: wczesna, zmasowana szarża z okrzykami, zanim pociski wroga przerzedzą szeregi, wymierzona w skrzydło albo odwód.
 recruits: Warbands, swordsmen, chosen heavy warriors, some cavalry.
 recruits_pl: Bandy wojowników, szermierze, wyborowi ciężcy wojownicy, trochę konnicy.
+mix: infantry 75, missile 5, cavalry 20
 - Departing from the careful build-up: charge early and all together with warcries, before the enemy's missiles thin you out.
 - Aim a strong group at the enemy's flank or at his reserve on higher ground: a broken flank breaks the whole line.
 - Keep the charge going: units in melee are reinforced, not pulled out.
@@ -222,6 +236,7 @@ summary: Fury of a whole people: every warrior into the fight, chariots on the f
 summary_pl: Gniew całego ludu: każdy wojownik do walki, rydwany na skrzydłach, druidzi i okrzyki dla odwagi - ale nie wolno jej atakować na wąskim froncie, gdzie liczebność nie ma znaczenia.
 recruits: Many cheap warbands, chariots, druids or screeching women where available.
 recruits_pl: Wiele tanich band wojowników, rydwany, druidzi albo zawodzące kobiety, jeśli są dostępne.
+mix: infantry 70, cavalry 20, handler 10
 - Bring every unit into the fight; no reserve stands idle.
 - Chariots and cavalry hit the enemy flanks while the infantry mass charges the front.
 - Use every morale weapon: druids chanting behind the line, screeching women near the enemy, warcries just before contact.
@@ -234,6 +249,7 @@ summary: Deception and envelopment: a weak centre that gives way, heavy wings th
 summary_pl: Podstęp i okrążenie: słaby środek, który się cofa, ciężkie skrzydła, które się zamykają, konnica zamykająca pierścień od tyłu, ukryte oddziały i wróg zwabiony na zły teren.
 recruits: Heavy infantry for the wings, cheaper infantry for the centre, strong cavalry (heavy and light Numidian), a few elephants.
 recruits_pl: Ciężka piechota na skrzydła, tańsza piechota na środek, silna konnica (ciężka i lekka numidyjska), kilka słoni.
+mix: infantry 40, missile 5, cavalry 45, handler 10
 - Cannae: a weak, bowed-forward centre that slowly gives ground; your heaviest infantry on both sides of it, held back; when the enemy pushes into the centre, the heavy wings turn inward into his flanks.
 - Your cavalry defeats the enemy cavalry, then closes behind his infantry to complete the ring.
 - Hide a unit or two (forest, long grass) to strike his rear at the right moment.
@@ -246,6 +262,7 @@ summary: The Spartan who saved Carthage: picks open flat ground, puts the elepha
 summary_pl: Spartiata, który uratował Kartaginę: wybiera otwarty, płaski teren, wystawia słonie z przodu, by zmiażdżyły linię wroga, i wygrywa na skrzydłach przewagą konnicy.
 recruits: Elephants, strong cavalry, a solid phalanx or heavy infantry behind them.
 recruits_pl: Słonie, silna konnica, solidna falanga albo ciężka piechota za nimi.
+mix: infantry 45, missile 5, cavalry 25, handler 25
 - Fight on open, flat ground where elephants and cavalry work best.
 - Elephants in a line in front of your infantry: they crush the enemy front and the infantry follows close behind them.
 - Cavalry on both wings drives off the enemy cavalry, then closes on the enemy flanks and rear.
@@ -257,6 +274,7 @@ summary: King of the light horse: javelins from every side, never stuck in melee
 summary_pl: Król lekkiej konnicy: oszczepy ze wszystkich stron, nigdy nie grzęźnie w walce z uformowaną piechotą, wraca szybciej, niż wróg nadąży, bezlitosny w pościgu.
 recruits: Mostly light javelin cavalry, some infantry to hold ground.
 recruits_pl: Głównie lekka konnica z oszczepami, trochę piechoty do trzymania terenu.
+mix: infantry 30, missile 5, cavalry 65
 - Light cavalry fights with javelins at range: ride in, throw, ride off; never stand in melee with formed infantry.
 - Draw the enemy cavalry away from its army and come back faster than it can.
 - When enemy units rout, pursue with every horseman.
@@ -268,6 +286,7 @@ summary: Never panics: when caught by surprise, the pharaoh himself counter-atta
 summary_pl: Nigdy nie wpada w panikę: zaskoczony, faraon sam kontratakuje z gwardią i rydwanami w bok napastnika i uderza na wroga, gdy ten zajęty jest grabieżą albo pościgiem.
 recruits: Chariots, archers, spearmen, a strong guard.
 recruits_pl: Rydwany, łucznicy, włócznicy, silna gwardia.
+mix: infantry 30, missile 30, cavalry 10, handler 30
 - When part of your army is hit by surprise, the general counter-attacks at once with his guard and the nearest fast units into the attackers' flank - closer to danger than the standard advice says.
 - Use chariots and fast units as a mobile reserve against enemies that are in disorder (pursuing, plundering, crossing).
 - Keep your army close together while it moves; expect a blow on the march.
@@ -279,6 +298,7 @@ summary: Raphia: the great phalanx in the centre decides the battle; a lost wing
 summary_pl: Rafia: wielka falanga w centrum rozstrzyga bitwę; przegrane skrzydło nie ma znaczenia, dopóki wygrywa środek.
 recruits: Many pikemen or other heavy infantry, archers, some cavalry, elephants if available.
 recruits_pl: Wielu pikinierów albo innej ciężkiej piechoty, łucznicy, trochę konnicy, słonie, jeśli są.
+mix: infantry 55, missile 15, cavalry 15, handler 15
 - Your centre (phalanx, heavy infantry) is where you win: commit it in mass against the enemy centre.
 - If one of your wings is beaten, do not panic and do not send the centre to save it: win in the centre.
 - The general stays with the centre, RALLY ready, to keep it steady.
@@ -290,6 +310,7 @@ summary: Surprise and discipline: comes by the way nobody expects, strikes while
 summary_pl: Zaskoczenie i dyscyplina: nadchodzi drogą, której nikt się nie spodziewa, uderza, gdy wróg jeszcze się formuje, i nie pozwala nikomu stanąć do grabieży, póki wróg nie zostanie zniszczony.
 recruits: Chariots, archers, fast infantry.
 recruits_pl: Rydwany, łucznicy, szybka piechota.
+mix: infantry 35, missile 25, cavalry 10, handler 30
 - Approach by the route the enemy does not expect (round a wood, through a gap) and hit him while he is still forming.
 - Strike with everything at once in the first minutes.
 - Once the enemy breaks, do not stop to reform or hold ground: pursue until no enemy is left on the field.
@@ -310,6 +331,7 @@ summary: Fights to the death: the only aim is to kill as many enemies as possibl
 summary_pl: Walczy do końca: jedyny cel to zabić jak najwięcej wrogów; własne straty, a nawet wygranie bitwy, nie mają znaczenia.
 recruits: The units that kill the most per denarius: heavy melee infantry and shock cavalry.
 recruits_pl: Jednostki, które zabijają najwięcej za każdego denara: ciężka piechota do walki wręcz i konnica uderzeniowa.
+mix: infantry 65, cavalry 35
 - Departing from all advice about saving your army: your only aim is to kill as many enemy men as possible; your own losses and winning the battle do not matter.
 - Never withdraw or retreat any unit, and never use task=withdraw.
 - Keep every unit in the fight all the time; missile units that run out of ammunition charge into melee.

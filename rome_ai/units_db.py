@@ -204,7 +204,7 @@ def custom_roster(faction: str) -> list[dict]:
             continue
         key = (u.get("dictionary", "").split() or [""])[0].lower()
         out.append({"type": t, "name": names.get(key, t), "cost": price, "category": u.get("category"),
-                    "general": "general_unit" in attrs, "stats": describe_type(t) or ""})
+                    "general": "general_unit" in attrs, "class": u.get("class", ""), "stats": describe_type(t) or ""})
     return sorted(out, key=lambda r: (r["category"], r["cost"], r["type"]))
 
 

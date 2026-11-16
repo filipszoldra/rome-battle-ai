@@ -12,6 +12,7 @@ Writes armies/<faction>-vs-<enemy>-<battle>.html and .md: the list to click, the
 from __future__ import annotations
 
 import argparse
+import re
 import asyncio
 import html
 import sys
@@ -81,6 +82,39 @@ def trim(roster: list[dict], picks: list[tuple[str, int]], budget: int, max_unit
     return [(t, left[t]) for t in dict.fromkeys(t for t, _ in picks) if left.get(t)]
 
 
+MIX_TOLERANCE = 15  # percentage points a role may stray from the commander's historical mix
+
+
+def role(u: dict) -> str:
+    """infantry / missile / cavalry / handler (elephants, dogs) - the general's bodyguard and siege are left out."""
+    if u["general"] or u["category"] == "siege":
+        return ""
+    if u["category"] == "infantry" and " missile" in " " + str(u.get("class", "")):
+        return "missile"
+    return u["category"]
+
+
+def parse_mix(text: str) -> dict[str, float]:
+    return {k: float(v) for k, v in re.findall(r"(\w+)\s+(\d+(?:\.\d+)?)", text or "")}
+
+
+def mix_errors(roster: list[dict], picks: list[tuple[str, int]], mix: dict[str, float], who: str) -> list[str]:
+    """Share of units per role against the commander's historical mix (roles the faction cannot field are dropped)."""
+    by_type = {u["type"]: role(u) for u in roster}
+    have = {role(u) for u in roster} - {""}
+    want = {k: v for k, v in mix.items() if k in have}
+    total = sum(want.values())
+    n = sum(c for t, c in picks if by_type.get(t))
+    if not total or not n:
+        return []
+    errs = []
+    for k, v in want.items():
+        target, got = v * 100 / total, sum(c for t, c in picks if by_type.get(t) == k) * 100 / n
+        if abs(got - target) > MIX_TOLERANCE:
+            errs.append(f"{who} wants about {target:.0f}% {k} units (+-{MIX_TOLERANCE}), your army has {got:.0f}%")
+    return errs
+
+
 def selftest() -> None:
     """validate() and trim() on the real Macedonian roster - no model call."""
     roster = units_db.custom_roster("macedon")
@@ -95,6 +129,8 @@ def selftest() -> None:
     assert any("no general" in e for e in validate(roster, [(pike, 2)], 10 ** 6, 20))
     cut = trim(roster, [(gen, 1), (pike, 30)], 5000, 20)
     assert validate(roster, cut, 5000, 20) == [] and cut[0] == (gen, 1), cut
+    assert not mix_errors(roster, [(gen, 1), (pike, 10)], parse_mix("infantry 100"), "x")
+    assert mix_errors(roster, [(gen, 1), (pike, 10)], parse_mix("cavalry 100"), "x")
     print("recruit selftest OK:", cut)
 
 
@@ -116,7 +152,8 @@ async def recruit(faction: str, enemies: list[str], budget: int, battle: str, pe
     system = f"{SYSTEM}\n\nGAME RULES:\n{rules}\n\nSTRATEGY (the standard craft):\n{strategy}"
     language = "Polish (with proper Polish letters)" if lang == "pl" else "English"
     commanders_text = "\n\n".join(
-        f"{k}: {c.name} - {c.fields.get('summary', '')}\nPreferred units: {c.fields.get('recruits', '')}\nOrders:\n"
+        f"{k}: {c.name} - {c.fields.get('summary', '')}\nPreferred units: {c.fields.get('recruits', '')}\n"
+        f"Historical mix (share of units, general excluded): {c.fields.get('mix') or 'no preference'}\nOrders:\n"
         + "\n".join(f"- {x}" for x in c.lines) for k, c in choices.items())
     user = (
         f"Battle: {BATTLES[battle][0]}.\nBudget: {budget} denarii. At most {max_units} units"
@@ -128,6 +165,9 @@ async def recruit(faction: str, enemies: list[str], budget: int, battle: str, pe
             f"- {u['name']} ({u['cost']}): {u['stats']}" for u in units_db.custom_roster(f)) for f in enemies)
         + ("\n\nHistory of such battles:\n" + "\n".join(f"- {P._battle_text(b, types)}" for b in hist) if hist else "")
         + f"\n\n{'Choose the commander from these' if personality == 'auto' else 'The commander'}:\n{commanders_text}"
+        + "\n\nThe commander's historical mix and preferred units are binding: build the army the way HE would have, "
+          f"keeping each role's share within {MIX_TOLERANCE} points of his mix; put the cheap units where he put cheap "
+          "troops (a weak centre, screens) and the expensive elite where he put his strength."
         + f"\n\nUnits you may pick (type id first):\n{roster_lines(roster)}"
         + f"\n\nWrite 'reason', 'plan' and 'why' in {language}. 'plan': how the army deploys and fights, 3-5 "
           "sentences. 'why': why this army should beat this enemy, 2-3 sentences.")
@@ -144,7 +184,12 @@ async def recruit(faction: str, enemies: list[str], budget: int, battle: str, pe
     general = ClaudeCodeGeneral(model=model, effort=effort)
     res = await general.ask(system, user, schema, effort=effort, timeout=400)
     picks = [(x["type"], int(x["count"])) for x in res.get("units", [])]
-    errors = validate(roster, picks, budget, max_units)
+    def problems(pk):
+        cmd = cmds.get(res.get("personality"))
+        return validate(roster, pk, budget, max_units) + (
+            mix_errors(roster, pk, parse_mix(cmd.fields.get("mix")), cmd.name) if cmd else [])
+
+    errors = problems(picks)
     if errors:  # one correction, then the army is cut to fit
         print("first answer broke the rules:", "; ".join(errors), "- asking for a correction")
         res = await general.ask(system, user + "\n\nYour previous answer was wrong: " + "; ".join(errors)

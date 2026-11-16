@@ -62,7 +62,7 @@ Speed and audacity: strikes before the enemy is ready, keeps a hidden reserve ag
 
 <details><summary>Orders the general follows</summary>
 
-- Strike early: close in fast, before the enemy has finished forming up, even if it costs some fatigue. This overrides "walk by default": against a static line order the infantry to attack the enemy units directly (task=attack, run=true) from the first plan, once the army is formed - never march to a halt line short of the enemy and charge "in the next plan".
+- Strike early: close in fast, before the enemy has finished forming up, even if it costs some fatigue. This overrides "walk by default": against a static line order the infantry to attack the enemy units directly (task=attack, run=true) from the first plan, once the army is formed - do not stop short of the enemy out of habit and promise a charge "in the next plan" (a staged attack is fine when there is a reason).
 - Keep a hidden reserve (Pharsalus): two or three solid infantry units behind the flank where the enemy cavalry will come, out of its sight. When his cavalry swings round, they charge it and then turn into the flank of his infantry.
 - Your general stays closer to the hardest fight than the standard advice says (20-40 m behind the line) with RALLY ready, still out of the melee unless a unit next to him is breaking.
 - When one wing wins, turn it at once into the flank of the enemy centre instead of pursuing.

@@ -69,7 +69,7 @@ summary_pl: Szybkość i śmiałość: uderza, zanim wróg się przygotuje, trzy
 recruits: Veteran heavy infantry (cohorts) as the core, a few cavalry, archers and auxiliaries - quality over numbers.
 recruits_pl: Weterańska ciężka piechota (kohorty) jako trzon, trochę konnicy, łucznicy i oddziały pomocnicze - jakość ponad liczbę.
 mix: infantry 60, missile 15, cavalry 20, handler 5
-- Strike early: close in fast, before the enemy has finished forming up, even if it costs some fatigue. This overrides "walk by default": against a static line order the infantry to attack the enemy units directly (task=attack, run=true) from the first plan, once the army is formed - never march to a halt line short of the enemy and charge "in the next plan".
+- Strike early: close in fast, before the enemy has finished forming up, even if it costs some fatigue. This overrides "walk by default": against a static line order the infantry to attack the enemy units directly (task=attack, run=true) from the first plan, once the army is formed - do not stop short of the enemy out of habit and promise a charge "in the next plan" (a staged attack is fine when there is a reason).
 - Keep a hidden reserve (Pharsalus): two or three solid infantry units behind the flank where the enemy cavalry will come, out of its sight. When his cavalry swings round, they charge it and then turn into the flank of his infantry.
 - Your general stays closer to the hardest fight than the standard advice says (20-40 m behind the line) with RALLY ready, still out of the melee unless a unit next to him is breaking.
 - When one wing wins, turn it at once into the flank of the enemy centre instead of pursuing.

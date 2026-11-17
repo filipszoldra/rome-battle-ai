@@ -115,6 +115,25 @@ def mix_errors(roster: list[dict], picks: list[tuple[str, int]], mix: dict[str, 
     return errs
 
 
+def cap_errors(roster: list[dict], picks: list[tuple[str, int]], caps: dict[str, int]) -> list[str]:
+    """Hard limits on the number of units of a role (e.g. missile=5)."""
+    by = {u["type"]: role(u) for u in roster}
+    return [f"{k}: {n} units, over the limit of {caps[k]}" for k in caps
+            if (n := sum(c for t, c in picks if by.get(t) == k)) > caps[k]]
+
+
+def apply_caps(roster: list[dict], picks: list[tuple[str, int]], caps: dict[str, int]) -> list[tuple[str, int]]:
+    """Cut units from the end of the list until every role is within its limit."""
+    by, picks = {u["type"]: role(u) for u in roster}, [list(p) for p in picks]
+    for k, cap in caps.items():
+        over = sum(c for t, c in picks if by.get(t) == k) - cap
+        for p in reversed(picks):
+            cut = min(over, p[1]) if by.get(p[0]) == k and over > 0 else 0
+            p[1] -= cut
+            over -= cut
+    return [(t, c) for t, c in picks if c > 0]
+
+
 def selftest() -> None:
     """validate() and trim() on the real Macedonian roster - no model call."""
     roster = units_db.custom_roster("macedon")
@@ -131,11 +150,14 @@ def selftest() -> None:
     assert validate(roster, cut, 5000, 20) == [] and cut[0] == (gen, 1), cut
     assert not mix_errors(roster, [(gen, 1), (pike, 10)], parse_mix("infantry 100"), "x")
     assert mix_errors(roster, [(gen, 1), (pike, 10)], parse_mix("cavalry 100"), "x")
+    assert cap_errors(roster, [(gen, 1), (pike, 10)], {"infantry": 5}) and not cap_errors(roster, [(pike, 5)], {"infantry": 5})
+    assert apply_caps(roster, [(gen, 1), (pike, 10)], {"infantry": 4}) == [(gen, 1), (pike, 4)]
     print("recruit selftest OK:", cut)
 
 
 async def recruit(faction: str, enemies: list[str], budget: int, battle: str, personality: str, max_units: int,
-                  model: str, effort: str, lang: str) -> dict:
+                  model: str, effort: str, lang: str, caps: dict[str, int] | None = None) -> dict:
+    caps = caps or {}
     roster = units_db.custom_roster(faction)
     if not roster:
         raise SystemExit(f"no custom battle units found for {faction} (game data at {units_db.GAME_DATA})")
@@ -168,6 +190,8 @@ async def recruit(faction: str, enemies: list[str], budget: int, battle: str, pe
         + "\n\nThe commander's historical mix and preferred units are binding: build the army the way HE would have, "
           f"keeping each role's share within {MIX_TOLERANCE} points of his mix; put the cheap units where he put cheap "
           "troops (a weak centre, screens) and the expensive elite where he put his strength."
+        + ("\n\nHARD LIMITS on unit counts: " + ", ".join(f"at most {n} {k} units" for k, n in caps.items()) + "."
+           if caps else "")
         + f"\n\nUnits you may pick (type id first):\n{roster_lines(roster)}"
         + f"\n\nWrite 'reason', 'plan' and 'why' in {language}. 'plan': how the army deploys and fights, 3-5 "
           "sentences. 'why': why this army should beat this enemy, 2-3 sentences.")
@@ -186,7 +210,7 @@ async def recruit(faction: str, enemies: list[str], budget: int, battle: str, pe
     picks = [(x["type"], int(x["count"])) for x in res.get("units", [])]
     def problems(pk):
         cmd = cmds.get(res.get("personality"))
-        return validate(roster, pk, budget, max_units) + (
+        return validate(roster, pk, budget, max_units) + cap_errors(roster, pk, caps) + (
             mix_errors(roster, pk, parse_mix(cmd.fields.get("mix")), cmd.name) if cmd else [])
 
     errors = problems(picks)
@@ -198,7 +222,7 @@ async def recruit(faction: str, enemies: list[str], budget: int, battle: str, pe
         picks = [(x["type"], int(x["count"])) for x in res.get("units", [])]
         if validate(roster, picks, budget, max_units):
             picks = trim(roster, picks, budget, max_units)
-    res["units"] = picks
+    res["units"] = apply_caps(roster, picks, caps) if caps else picks
     res["roster"] = roster
     return res
 
@@ -257,6 +281,8 @@ def main() -> None:
     p.add_argument("--battle", choices=list(BATTLES), default="field")
     p.add_argument("--personality", default="auto", help="a commander's id, or auto (Claude chooses)")
     p.add_argument("--units", type=int, default=20, help="most units in the army (the game allows 20)")
+    p.add_argument("--cap", nargs="+", default=[], metavar="ROLE=N",
+                   help="hard limit on units of a role, e.g. missile=5 (roles: infantry missile cavalry handler)")
     p.add_argument("--model", default="claude-sonnet-5-5")
     p.add_argument("--effort", default="medium")
     p.add_argument("--lang", choices=["pl", "en"], default="pl", help="language of the army sheet")
@@ -281,7 +307,8 @@ def main() -> None:
             p.error(f"unknown faction {f!r} - see --list")
     if a.personality != "auto" and a.personality not in P.commanders():
         p.error(f"unknown commander {a.personality!r} - see --list")
-    res = asyncio.run(recruit(a.faction, a.enemy, a.budget, a.battle, a.personality, a.units, a.model, a.effort, a.lang))
+    res = asyncio.run(recruit(a.faction, a.enemy, a.budget, a.battle, a.personality, a.units, a.model, a.effort, a.lang,
+                             {k: int(v) for k, _, v in (s.partition('=') for s in a.cap)}))
     md, page = render(res, a.faction, a.enemy, a.budget, a.battle, a.units, a.lang)
     a.out.mkdir(parents=True, exist_ok=True)
     stem = a.out / f"{a.faction}-vs-{'-'.join(a.enemy)}-{a.battle}"

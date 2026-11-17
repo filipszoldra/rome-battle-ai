@@ -156,7 +156,7 @@ def selftest() -> None:
 
 
 async def recruit(faction: str, enemies: list[str], budget: int, battle: str, personality: str, max_units: int,
-                  model: str, effort: str, lang: str, caps: dict[str, int] | None = None) -> dict:
+                  model: str, effort: str, lang: str, caps: dict[str, int] | None = None, min_types: int = 0) -> dict:
     caps = caps or {}
     roster = units_db.custom_roster(faction)
     if not roster:
@@ -190,6 +190,8 @@ async def recruit(faction: str, enemies: list[str], budget: int, battle: str, pe
         + "\n\nThe commander's historical mix and preferred units are binding: build the army the way HE would have, "
           f"keeping each role's share within {MIX_TOLERANCE} points of his mix; put the cheap units where he put cheap "
           "troops (a weak centre, screens) and the expensive elite where he put his strength."
+        + (f"\n\nThe army must have at least {min_types} DIFFERENT unit types (the general's bodyguard counts as one)."
+           if min_types else "")
         + ("\n\nHARD LIMITS on unit counts: " + ", ".join(f"at most {n} {k} units" for k, n in caps.items()) + "."
            if caps else "")
         + f"\n\nUnits you may pick (type id first):\n{roster_lines(roster)}"
@@ -211,6 +213,7 @@ async def recruit(faction: str, enemies: list[str], budget: int, battle: str, pe
     def problems(pk):
         cmd = cmds.get(res.get("personality"))
         return validate(roster, pk, budget, max_units) + cap_errors(roster, pk, caps) + (
+            [f"only {len(pk)} different unit types, at least {min_types} wanted"] if len(pk) < min_types else []) + (
             mix_errors(roster, pk, parse_mix(cmd.fields.get("mix")), cmd.name) if cmd else [])
 
     errors = problems(picks)
@@ -283,6 +286,7 @@ def main() -> None:
     p.add_argument("--units", type=int, default=20, help="most units in the army (the game allows 20)")
     p.add_argument("--cap", nargs="+", default=[], metavar="ROLE=N",
                    help="hard limit on units of a role, e.g. missile=5 (roles: infantry missile cavalry handler)")
+    p.add_argument("--min-types", type=int, default=0, help="at least this many different unit types (rows)")
     p.add_argument("--model", default="claude-sonnet-5-5")
     p.add_argument("--effort", default="medium")
     p.add_argument("--lang", choices=["pl", "en"], default="pl", help="language of the army sheet")
@@ -308,7 +312,7 @@ def main() -> None:
     if a.personality != "auto" and a.personality not in P.commanders():
         p.error(f"unknown commander {a.personality!r} - see --list")
     res = asyncio.run(recruit(a.faction, a.enemy, a.budget, a.battle, a.personality, a.units, a.model, a.effort, a.lang,
-                             {k: int(v) for k, _, v in (s.partition('=') for s in a.cap)}))
+                             {k: int(v) for k, _, v in (s.partition('=') for s in a.cap)}, a.min_types))
     md, page = render(res, a.faction, a.enemy, a.budget, a.battle, a.units, a.lang)
     a.out.mkdir(parents=True, exist_ok=True)
     stem = a.out / f"{a.faction}-vs-{'-'.join(a.enemy)}-{a.battle}"

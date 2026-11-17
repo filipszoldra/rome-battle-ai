@@ -135,6 +135,14 @@ summary_pl: Arminiusz, który znał rzymską musztrę, wciągnął trzy legiony 
 - In forest and broken ground a formed line loses its advantage: barbarian infantry wins there.
 - Never march a long column through forest within reach of an enemy that can hide.
 
+### angrivarian_wall | Angrivarian Wall | Wał Angiwaryjski
+year: 16 AD
+sides: roman > barbarian
+summary: Germanicus found Arminius's Germans drawn up in woods behind an earth wall by a marsh. Slingers and artillery stones cleared the defenders off the wall before the legions went in, and the Germans, pressed against the marsh, were cut down.
+summary_pl: Germanik zastał Germanów Arminiusza w lesie za wałem ziemnym przy bagnie. Procarze i kamienie z machin zmietli obrońców z wału, zanim weszły legiony, a Germanie przyparci do bagna zostali wycięci.
+- A defended wall or forest edge is not assaulted by infantry first: slingers, archers and artillery clear the defenders off it, then the heavy infantry goes in.
+- An enemy with his back to a marsh or an obstacle cannot get away: pin him there.
+
 ### tapae_87 | Tapae | Tapae
 year: 87 AD
 sides: barbarian > roman

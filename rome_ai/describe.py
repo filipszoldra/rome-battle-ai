@@ -426,7 +426,7 @@ def describe(start: BattleStart, state: State, terrain=None, static: bool = True
         "YOU ARE THE DEFENDER - but battles are almost never decided by the time limit: win the fight, and "
         "answer every move the enemy makes."
         if start.player_is_attacker
-        else "YOU ARE THE ATTACKER: you have to beat his army - waiting gains you nothing."
+        else "YOU ARE THE ATTACKER: you have to beat his army - waiting gains you nothing, except to use a missile advantage (see BALANCE)."
     )
     if start.battle_type == BATTLE_SUCCESSFUL_AMBUSH:
         # the game's attacker flag names the army that marched on the campaign map, i.e. the one that got ambushed

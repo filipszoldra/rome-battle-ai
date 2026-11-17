@@ -386,6 +386,33 @@ def describe_static(start: BattleStart, state: State) -> str:
     return "\n".join(lines)
 
 
+LONG_RANGE_M = 60.0  # m; shorter missile weapons (thrown pila, javelins) only count at the melee
+
+
+def _balance(mine: list[Unit], theirs: list[Unit]) -> str:
+    """One line: who has the missile fire (men with ammo left), cavalry and elephants - the numbers the general
+    would otherwise have to add up from the unit lists himself."""
+    from .units_db import missile_range
+
+    def side(us):
+        fire = [(u, missile_range(u.name)) for u in us if u.category != "siege" and (u.ammo is None or u.ammo > 0.05)]
+        fire = [(u, r) for u, r in fire if r and r >= LONG_RANGE_M]  # pila and javelins (~35-50 m) are not fire at a distance
+        men = sum(u.soldiers for u, _ in fire)
+        rng = f", range ~{sum(r for _, r in fire) / len(fire):.0f} m" if fire else ""
+        return men, f"{men} men in {len(fire)} units{rng}"
+
+    (m_men, m_txt), (t_men, t_txt) = side(mine), side(theirs)
+    ratio = m_men / t_men if t_men else (9.9 if m_men else 1.0)
+    verdict = ("YOU outshoot him" if ratio >= 1.7 else "HE outshoots you" if ratio <= 0.6 else "missile fire roughly even")
+    cav = lambda us: sum(1 for u in us if u.category == "cavalry")
+    ele = lambda us: sum(1 for u in us if "elephant" in u.name)
+    out = (f"BALANCE - missile fire (men with ammo left): you {m_txt}; him {t_txt} -> {verdict}"
+           + (f" ({ratio:.1f}:1)" if m_men and t_men else "") + f". Cavalry units: you {cav(mine)}, him {cav(theirs)}.")
+    if ele(theirs) or ele(mine):
+        out += f" Elephants: you {ele(mine)}, him {ele(theirs)}."
+    return out
+
+
 def describe(start: BattleStart, state: State, terrain=None, static: bool = True) -> str:
     """Current situation. With static=False the terrain/town maps are left out (they're in start.briefing)."""
     ai = start.ai_alliance
@@ -420,6 +447,7 @@ def describe(start: BattleStart, state: State, terrain=None, static: bool = True
     lines = [
         f"Battle time {state.t:.0f}s. {role}",
         f"Your army centre ({mx:.0f},{my:.0f}); {enemy_where}.",
+        _balance(mine_alive, theirs_alive),
     ]
     if static:
         lines.insert(0, f"Map {start.map.width:.0f}x{start.map.height:.0f}m, x=east, y=north. "

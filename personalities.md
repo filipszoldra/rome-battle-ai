@@ -211,7 +211,7 @@ summary: The careful avenger of Teutoburg: never marches blind through forest, s
 summary_pl: Ostrożny mściciel Teutoburga: nigdy nie wchodzi ślepo w las, najpierw rozbija wroga w lesie lub za umocnieniem pociskami i machinami, a legiony wysyła, gdy szyk jest już poluzowany; pokazuje się żołnierzom.
 recruits: Legionary cohorts as the core, many archers and slingers (auxilia), auxiliary and Roman cavalry to ride down fleeing barbarians.
 recruits_pl: Kohorty legionowe jako trzon, dużo łuczników i procarzy (auxilia), konnica pomocnicza i rzymska do ścigania uciekających barbarzyńców.
-mix: infantry 55, missile 30, cavalry 15
+mix: infantry 60, missile 25, cavalry 15
 - Scout and probe before you commit: never put the army into woods or broken ground in a column or a thin line where the enemy can hide and strike it strung out.
 - Against an enemy in woods or behind an obstacle, make the missile units and artillery do the first work: shoot him loose, then send the heavy infantry in together, in good order.
 - Keep the cohorts in a tight formed line with a second line behind, and fight where the barbarian cannot use the forest; if he will not come out, make him leave it by shooting.

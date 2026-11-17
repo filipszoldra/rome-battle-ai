@@ -200,7 +200,11 @@ def doctrine(mine: Army, foes: list[tuple[int, Army]], commander: str | None = N
             + (f" (Chosen because: {reason})" if reason else "")
             + "\nThe STRATEGY above is the standard craft of this game that every commander follows. Keep to it, "
               "except where these orders of yours deliberately depart from it or put something else first - there, "
-              "these orders win:\n" + "\n".join(f"- {x}" for x in c.lines))
+              "these orders win:\n" + "\n".join(f"- {x}" for x in c.lines)
+            + "\nThese orders are your habits, not a script. Before you use one, ask whether it fits THIS battle: the "
+              "BALANCE line (missiles, cavalry, elephants), the terrain, the enemy's army and what he is doing. When "
+              "the situation calls for something else, play what a great commander would play here - your "
+              "temperament shows in HOW you do it, not in doing it against all sense.")
     hist = side_lessons(mine, [a for _, a in foes])
     if hist:
         out.append("\nHISTORY - battles between armies like yours and your enemy's. Learn from the winners and the "
